@@ -1,0 +1,83 @@
+Project Structure and Module Mapping
+
+perceptual_occlusion/
+│
+├── CMakeLists.txt
+├── README.md
+│
+├── assets/
+│   ├── models/
+│   │   └── midas.onnx
+│   └── shaders/
+│       ├── vertex.metal
+│       └── fragment_occlusion.metal
+│
+├── src/
+│   ├── main.cpp
+│   ├── core/
+│   │   ├── Engine.hpp / Engine.cpp
+│   ├── camera/
+│   │   ├── Camera.hpp / Camera.cpp
+│   ├── perception/
+│   │   ├── DepthEstimator.hpp / .cpp
+│   │   ├── DepthPostProcessor.hpp / .cpp
+│   ├── rendering/
+│   │   ├── Renderer.hpp / .cpp
+│   │   ├── MetalContext.hpp / .mm
+│   └── compositing/
+│       ├── OcclusionPass.hpp / .cpp
+
+Pipeline Flow:
+Camera → DepthEstimator → DepthPostProcessor → Renderer → OcclusionPass → Output
+
+Build Phases:
+1. Camera feed
+2. Depth inference
+3. Depth smoothing
+4. Rendering
+5. Occlusion
+6. Advanced features
+
+Module-by-Module Breakdown
+
+1. main.cpp
+- Entry point of the application
+- Initializes Engine and starts main loop
+
+2. core/Engine
+- Orchestrates the entire pipeline
+- Connects camera, perception, and rendering modules
+- Runs main loop
+
+3. camera/Camera
+- Handles webcam input using OpenCV
+- Captures frames and returns cv::Mat
+
+4. perception/DepthEstimator
+- Loads ONNX model (MiDaS or similar)
+- Performs inference on input frames
+- Outputs raw depth map
+
+5. perception/DepthPostProcessor
+- Applies temporal smoothing across frames
+- Applies spatial filtering (bilateral filter)
+- Produces stable depth map
+
+6. rendering/Renderer
+- Handles GPU rendering pipeline
+- Uploads camera frame and depth map as textures
+- Renders virtual objects
+
+7. rendering/MetalContext
+- Initializes Metal device and command queue
+- Manages pipeline states and shader execution
+
+8. compositing/OcclusionPass
+- Performs depth comparison between real and virtual scene
+- Executes fragment shader for occlusion masking
+- Produces final composited frame
+
+Key Responsibilities:
+- Maintain low latency
+- Ensure temporal stability
+- Perform GPU-based compositing

@@ -1,0 +1,50 @@
+[
+{
+  "directory": "/Users/rohaanadvani/Desktop/perceptual_occlusion/build",
+  "command": "/usr/bin/clang++ -DPROJECT_ROOT=\\\"/Users/rohaanadvani/Desktop/perceptual_occlusion\\\" -I/opt/homebrew/include/onnxruntime -I/Users/rohaanadvani/Desktop/perceptual_occlusion/src -F/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks -isystem /opt/homebrew/Cellar/opencv/4.13.0_7/include/opencv4 -O3 -DNDEBUG -std=gnu++17 -arch arm64 -o CMakeFiles/engine.dir/src/main.cpp.o -c /Users/rohaanadvani/Desktop/perceptual_occlusion/src/main.cpp",
+  "file": "/Users/rohaanadvani/Desktop/perceptual_occlusion/src/main.cpp",
+  "output": "CMakeFiles/engine.dir/src/main.cpp.o"
+},
+{
+  "directory": "/Users/rohaanadvani/Desktop/perceptual_occlusion/build",
+  "command": "/usr/bin/clang++ -DPROJECT_ROOT=\\\"/Users/rohaanadvani/Desktop/perceptual_occlusion\\\" -I/opt/homebrew/include/onnxruntime -I/Users/rohaanadvani/Desktop/perceptual_occlusion/src -F/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks -isystem /opt/homebrew/Cellar/opencv/4.13.0_7/include/opencv4 -O3 -DNDEBUG -std=gnu++17 -arch arm64 -o CMakeFiles/engine.dir/src/core/Engine.cpp.o -c /Users/rohaanadvani/Desktop/perceptual_occlusion/src/core/Engine.cpp",
+  "file": "/Users/rohaanadvani/Desktop/perceptual_occlusion/src/core/Engine.cpp",
+  "output": "CMakeFiles/engine.dir/src/core/Engine.cpp.o"
+},
+{
+  "directory": "/Users/rohaanadvani/Desktop/perceptual_occlusion/build",
+  "command": "/usr/bin/clang++ -DPROJECT_ROOT=\\\"/Users/rohaanadvani/Desktop/perceptual_occlusion\\\" -I/opt/homebrew/include/onnxruntime -I/Users/rohaanadvani/Desktop/perceptual_occlusion/src -F/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks -isystem /opt/homebrew/Cellar/opencv/4.13.0_7/include/opencv4 -O3 -DNDEBUG -std=gnu++17 -arch arm64 -o CMakeFiles/engine.dir/src/camera/Camera.cpp.o -c /Users/rohaanadvani/Desktop/perceptual_occlusion/src/camera/Camera.cpp",
+  "file": "/Users/rohaanadvani/Desktop/perceptual_occlusion/src/camera/Camera.cpp",
+  "output": "CMakeFiles/engine.dir/src/camera/Camera.cpp.o"
+},
+{
+  "directory": "/Users/rohaanadvani/Desktop/perceptual_occlusion/build",
+  "command": "/usr/bin/clang++ -DPROJECT_ROOT=\\\"/Users/rohaanadvani/Desktop/perceptual_occlusion\\\" -I/opt/homebrew/include/onnxruntime -I/Users/rohaanadvani/Desktop/perceptual_occlusion/src -F/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks -isystem /opt/homebrew/Cellar/opencv/4.13.0_7/include/opencv4 -O3 -DNDEBUG -std=gnu++17 -arch arm64 -o CMakeFiles/engine.dir/src/perception/DepthEstimator.cpp.o -c /Users/rohaanadvani/Desktop/perceptual_occlusion/src/perception/DepthEstimator.cpp",
+  "file": "/Users/rohaanadvani/Desktop/perceptual_occlusion/src/perception/DepthEstimator.cpp",
+  "output": "CMakeFiles/engine.dir/src/perception/DepthEstimator.cpp.o"
+},
+{
+  "directory": "/Users/rohaanadvani/Desktop/perceptual_occlusion/build",
+  "command": "/usr/bin/clang++ -DPROJECT_ROOT=\\\"/Users/rohaanadvani/Desktop/perceptual_occlusion\\\" -I/opt/homebrew/include/onnxruntime -I/Users/rohaanadvani/Desktop/perceptual_occlusion/src -F/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks -isystem /opt/homebrew/Cellar/opencv/4.13.0_7/include/opencv4 -O3 -DNDEBUG -std=gnu++17 -arch arm64 -o CMakeFiles/engine.dir/src/perception/DepthPostProcessor.cpp.o -c /Users/rohaanadvani/Desktop/perceptual_occlusion/src/perception/DepthPostProcessor.cpp",
+  "file": "/Users/rohaanadvani/Desktop/perceptual_occlusion/src/perception/DepthPostProcessor.cpp",
+  "output": "CMakeFiles/engine.dir/src/perception/DepthPostProcessor.cpp.o"
+},
+{
+  "directory": "/Users/rohaanadvani/Desktop/perceptual_occlusion/build",
+  "command": "/usr/bin/clang++ -DPROJECT_ROOT=\\\"/Users/rohaanadvani/Desktop/perceptual_occlusion\\\" -I/opt/homebrew/include/onnxruntime -I/Users/rohaanadvani/Desktop/perceptual_occlusion/src -F/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks -isystem /opt/homebrew/Cellar/opencv/4.13.0_7/include/opencv4 -O3 -DNDEBUG -std=gnu++17 -arch arm64 -o CMakeFiles/engine.dir/src/rendering/MetalContext.mm.o -c /Users/rohaanadvani/Desktop/perceptual_occlusion/src/rendering/MetalContext.mm",
+  "file": "/Users/rohaanadvani/Desktop/perceptual_occlusion/src/rendering/MetalContext.mm",
+  "output": "CMakeFiles/engine.dir/src/rendering/MetalContext.mm.o"
+},
+{
+  "directory": "/Users/rohaanadvani/Desktop/perceptual_occlusion/build",
+  "command": "/usr/bin/clang++ -DPROJECT_ROOT=\\\"/Users/rohaanadvani/Desktop/perceptual_occlusion\\\" -I/opt/homebrew/include/onnxruntime -I/Users/rohaanadvani/Desktop/perceptual_occlusion/src -F/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks -isystem /opt/homebrew/Cellar/opencv/4.13.0_7/include/opencv4 -O3 -DNDEBUG -std=gnu++17 -arch arm64 -o CMakeFiles/engine.dir/src/rendering/Renderer.mm.o -c /Users/rohaanadvani/Desktop/perceptual_occlusion/src/rendering/Renderer.mm",
+  "file": "/Users/rohaanadvani/Desktop/perceptual_occlusion/src/rendering/Renderer.mm",
+  "output": "CMakeFiles/engine.dir/src/rendering/Renderer.mm.o"
+},
+{
+  "directory": "/Users/rohaanadvani/Desktop/perceptual_occlusion/build",
+  "command": "/usr/bin/clang++ -DPROJECT_ROOT=\\\"/Users/rohaanadvani/Desktop/perceptual_occlusion\\\" -I/opt/homebrew/include/onnxruntime -I/Users/rohaanadvani/Desktop/perceptual_occlusion/src -F/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks -isystem /opt/homebrew/Cellar/opencv/4.13.0_7/include/opencv4 -O3 -DNDEBUG -std=gnu++17 -arch arm64 -o CMakeFiles/engine.dir/src/compositing/OcclusionPass.cpp.o -c /Users/rohaanadvani/Desktop/perceptual_occlusion/src/compositing/OcclusionPass.cpp",
+  "file": "/Users/rohaanadvani/Desktop/perceptual_occlusion/src/compositing/OcclusionPass.cpp",
+  "output": "CMakeFiles/engine.dir/src/compositing/OcclusionPass.cpp.o"
+}
+]
