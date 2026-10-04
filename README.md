@@ -1,5 +1,11 @@
 # Real-Time Perceptual Occlusion Engine for AR Systems
 
+<p align="center">
+  <a href="docs/demo.mp4"><img src="docs/demo.gif" alt="Perceptual Occlusion Engine demo: a virtual sphere slides behind a real laptop, cup and flowers" width="100%"></a>
+  <br>
+  <sub><a href="docs/demo.mp4">▶ Watch the full video with sound</a></sub>
+</p>
+
 ## 1. Overview
 
 This project implements a real-time perception and rendering pipeline that enables physically consistent occlusion of virtual objects by real-world geometry using a monocular camera.
