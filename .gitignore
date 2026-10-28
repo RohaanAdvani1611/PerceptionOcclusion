@@ -1,0 +1,12 @@
+# Build output
+build/
+build-release/
+
+# Benchmark results (bench.sh / --csv)
+*.csv
+
+# Editor / clangd index
+.cache/
+
+# macOS
+.DS_Store

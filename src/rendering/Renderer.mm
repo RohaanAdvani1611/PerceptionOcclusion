@@ -212,6 +212,7 @@ cv::Mat Renderer::render() {
 
     [cb commit];
     [cb waitUntilCompleted];
+    lastGpuMs_ = (cb.GPUEndTime - cb.GPUStartTime) * 1000.0;
 
     // ── Readback color texture → cv::Mat BGRA ────────────────────────────────
     cv::Mat result(height_, width_, CV_8UC4);

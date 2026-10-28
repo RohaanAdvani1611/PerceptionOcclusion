@@ -14,10 +14,16 @@ static void onSignal(int) { gQuit = true; }
 using Clock = std::chrono::steady_clock;
 using Ms = std::chrono::duration<double, std::milli>;
 
+// Frames excluded from the run summary while ONNX Runtime and Metal warm up
+constexpr int kWarmupFrames = 30;
+
 // ── Construction ──────────────────────────────────────────────────────────────
 
-Engine::Engine()
-    : camera_(1), depthEstimator_(PROJECT_ROOT "/assets/models/midas.onnx"), renderer_(ctx_)
+Engine::Engine(EngineOptions opts)
+    : opts_(std::move(opts)),
+      profiler_({"read", "infer", "post", "render", "gpu", "occlusion", "display", "latency"},
+                kWarmupFrames),
+      camera_(1), depthEstimator_(PROJECT_ROOT "/assets/models/midas.onnx"), renderer_(ctx_)
 {
 }
 
@@ -47,47 +53,48 @@ bool Engine::initSystems()
     return true;
 }
 
-bool Engine::processFrame(Frame &frame, double &readMs, double &inferMs, double &renderMs)
+bool Engine::processFrame(Frame &frame)
 {
+    // read includes blocking on the camera's next frame, so it tracks sensor FPS
     auto t0 = Clock::now();
     if (!camera_.read(frame.image))
         return false;
     auto t1 = Clock::now();
 
     frame.timestamp = std::chrono::duration<double>(t1.time_since_epoch()).count();
-    readMs = Ms(t1 - t0).count();
+    profiler_.record("read", Ms(t1 - t0).count());
 
     if (hasDepth_)
     {
         auto ti = Clock::now();
         frame.depth = depthEstimator_.infer(frame.image);
+        auto tp = Clock::now();
         frame.depthSmoothed = depthPostProcessor_.process(frame.depth);
-        inferMs = Ms(Clock::now() - ti).count();
+        profiler_.record("infer", Ms(tp - ti).count());
+        profiler_.record("post", Ms(Clock::now() - tp).count());
     }
 
     if (hasMetal_)
     {
         auto tr = Clock::now();
         frame.rendered = renderer_.render();
-        renderMs = Ms(Clock::now() - tr).count();
+        profiler_.record("render", Ms(Clock::now() - tr).count());
+        profiler_.record("gpu", renderer_.lastGpuMs());
     }
 
     if (hasMetal_ && hasDepth_)
+    {
+        auto to = Clock::now();
         frame.occluded = occlusionPass_.apply(
             frame.rendered, frame.depthSmoothed, occlusionThreshold_);
+        profiler_.record("occlusion", Ms(Clock::now() - to).count());
+    }
 
     return true;
 }
 
-void Engine::updateDisplay(const Frame &frame, double fps, double &showMs)
+void Engine::updateDisplay(const Frame &frame)
 {
-    auto t0 = Clock::now();
-
-    cv::Mat camView = frame.image.clone();
-    cv::putText(camView, "FPS: " + std::to_string(static_cast<int>(fps)),
-                cv::Point(10, 30), cv::FONT_HERSHEY_SIMPLEX,
-                1.0, cv::Scalar(0, 255, 0), 2);
-    // cv::imshow("Camera", camView);
 
     if (hasDepth_ && !frame.depthSmoothed.empty())
     {
@@ -113,8 +120,6 @@ void Engine::updateDisplay(const Frame &frame, double fps, double &showMs)
                     0.7, cv::Scalar(0, 255, 255), 2);
         cv::imshow("AR View", arView);
     }
-
-    showMs = Ms(Clock::now() - t0).count();
 }
 
 void Engine::handleInput(int key)
@@ -188,41 +193,43 @@ void Engine::run()
 
     Frame frame;
     uint64_t frameId = 0;
-    int fpsTick = 0;
-    double fps = 0.0;
-    double readMs = 0.0;
-    double inferMs = 0.0;
-    double renderMs = 0.0;
-    double showMs = 0.0;
     auto fpsTimer = Clock::now();
 
     while (!gQuit)
     {
-        if (!processFrame(frame, readMs, inferMs, renderMs))
+        if (!processFrame(frame))
             break;
         frame.id = frameId++;
 
-        ++fpsTick;
-        double elapsed = Ms(Clock::now() - fpsTimer).count() / 1000.0;
+        // waitKey is where highgui actually presents the windows on macOS
+        auto td = Clock::now();
+        updateDisplay(frame);
+        int key = cv::waitKey(1) & 0xFF;
+        auto shown = Clock::now();
+        profiler_.record("display", Ms(shown - td).count());
+
+        // Processing latency: camera frame handed to us → frame presented
+        double shownSec = std::chrono::duration<double>(shown.time_since_epoch()).count();
+        profiler_.record("latency", (shownSec - frame.timestamp) * 1000.0);
+        profiler_.endFrame();
+
+        double elapsed = Ms(shown - fpsTimer).count() / 1000.0;
         if (elapsed >= 1.0)
         {
-            fps = fpsTick / elapsed;
-            fpsTick = 0;
-            fpsTimer = Clock::now();
-            std::cout << "FPS: " << fps
-                      << "  read: " << readMs << "ms"
-                      << "  infer: " << inferMs << "ms"
-                      << "  render: " << renderMs << "ms"
-                      << "  show: " << showMs << "ms\n";
+            profiler_.printWindow(elapsed);
+            fpsTimer = shown;
         }
 
-        updateDisplay(frame, fps, showMs);
-
-        int key = cv::waitKey(1) & 0xFF;
+        if (opts_.benchFrames > 0 && profiler_.measuredFrames() >= opts_.benchFrames)
+            break;
         if (key == 27 || key == 'q' || key == 'Q')
             break;
         handleInput(key);
     }
 
     camera_.release();
+
+    profiler_.printSummary();
+    if (!opts_.csvPath.empty())
+        profiler_.writeCsv(opts_.csvPath);
 }

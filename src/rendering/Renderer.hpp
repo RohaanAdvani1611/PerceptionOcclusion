@@ -22,6 +22,9 @@ public:
     // alpha=255 where sphere geometry exists, alpha=0 elsewhere.
     cv::Mat render();
 
+    // GPU execution time of the last render() command buffer, excluding readback
+    double lastGpuMs() const { return lastGpuMs_; }
+
 private:
     MetalContext&    ctx_;
     bool             ready_      = false;
@@ -29,6 +32,7 @@ private:
     int              height_     = 0;
     int              indexCount_ = 0;
     CameraIntrinsics intrinsics_ {};
+    double           lastGpuMs_  = 0.0;
 
     float sphereX_ =  0.0f;
     float sphereY_ =  0.0f;
