@@ -1,3 +1,0 @@
-/Users/rohaanadvani/Desktop/perceptual_occlusion/build/CMakeFiles/engine.dir
-/Users/rohaanadvani/Desktop/perceptual_occlusion/build/CMakeFiles/edit_cache.dir
-/Users/rohaanadvani/Desktop/perceptual_occlusion/build/CMakeFiles/rebuild_cache.dir
