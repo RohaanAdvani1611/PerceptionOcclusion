@@ -16,7 +16,11 @@ struct Vertex {
 struct Uniforms {
     simd_float4x4 mvp;
     simd_float4   color;
+    float         occlusionScale;
 };
+
+// The occlusion threshold means "real depth value at the sphere's starting distance"
+constexpr float kOcclusionReferenceDistance = 1.5f;
 
 // ── Sphere generation ─────────────────────────────────────────────────────────
 
@@ -80,11 +84,54 @@ void Renderer::moveSphere(float dx, float dy, float dz) {
 Renderer::~Renderer() {
     auto release = [](void*& p) { if (p) { CFBridgingRelease(p); p = nullptr; } };
     release(metalDepthTexture_);
-    release(colorTexture_);
+    release(realDepthTexture_);
+    release(cameraTexture_);
+    release(outputTexture_);
+    release(realDepthBuffer_);
+    release(cameraBuffer_);
+    release(outputBuffer_);
     release(indexBuffer_);
     release(vertexBuffer_);
+    release(backgroundDepthState_);
     release(depthStencilState_);
+    release(backgroundPipelineState_);
     release(pipelineState_);
+}
+
+// Creates a texture whose pixels live in a shared buffer, so the CPU can read and
+// write them through buffer.contents with no copy.
+static void makeSharedTexture(id<MTLDevice> dev, MTLPixelFormat format, size_t pixelBytes,
+                              MTLTextureUsage usage, int width, int height,
+                              void*& bufferOut, void*& textureOut, size_t& bytesPerRowOut) {
+    size_t align = [dev minimumLinearTextureAlignmentForPixelFormat:format];
+    size_t bytesPerRow = (width * pixelBytes + align - 1) / align * align;
+
+    id<MTLBuffer> buffer = [dev newBufferWithLength:bytesPerRow * height
+                                            options:MTLResourceStorageModeShared];
+
+    MTLTextureDescriptor* td =
+        [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:format
+                                                           width:width
+                                                          height:height
+                                                       mipmapped:NO];
+    td.storageMode = MTLStorageModeShared;
+    td.usage       = usage;
+
+    bufferOut      = (void*)CFBridgingRetain(buffer);
+    textureOut     = (void*)CFBridgingRetain([buffer newTextureWithDescriptor:td
+                                                                       offset:0
+                                                                  bytesPerRow:bytesPerRow]);
+    bytesPerRowOut = bytesPerRow;
+}
+
+cv::Mat Renderer::cameraInput() const {
+    id<MTLBuffer> buffer = (__bridge id<MTLBuffer>)cameraBuffer_;
+    return cv::Mat(height_, width_, CV_8UC4, buffer.contents, colorBytesPerRow_);
+}
+
+cv::Mat Renderer::depthInput() const {
+    id<MTLBuffer> buffer = (__bridge id<MTLBuffer>)realDepthBuffer_;
+    return cv::Mat(height_, width_, CV_32F, buffer.contents, depthBytesPerRow_);
 }
 
 bool Renderer::init(int width, int height, const CameraIntrinsics& intrinsics) {
@@ -95,6 +142,11 @@ bool Renderer::init(int width, int height, const CameraIntrinsics& intrinsics) {
     id<MTLDevice>  dev = (__bridge id<MTLDevice>)ctx_.device();
     id<MTLLibrary> lib = (__bridge id<MTLLibrary>)ctx_.shaderLibrary();
     if (!dev || !lib) return false;
+
+    if (!dev.hasUnifiedMemory) {
+        std::cerr << "Renderer: requires a GPU with unified memory (Apple Silicon)\n";
+        return false;
+    }
 
     // ── Vertex descriptor (matches Vertex struct layout) ─────────────────────
     MTLVertexDescriptor* vd     = [MTLVertexDescriptor new];
@@ -122,11 +174,29 @@ bool Renderer::init(int width, int height, const CameraIntrinsics& intrinsics) {
     }
     pipelineState_ = (void*)CFBridgingRetain(ps);
 
+    MTLRenderPipelineDescriptor* bpd = [MTLRenderPipelineDescriptor new];
+    bpd.vertexFunction                  = [lib newFunctionWithName:@"vertex_background"];
+    bpd.fragmentFunction                = [lib newFunctionWithName:@"fragment_background"];
+    bpd.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
+    bpd.depthAttachmentPixelFormat      = MTLPixelFormatDepth32Float;
+    id<MTLRenderPipelineState> bps = [dev newRenderPipelineStateWithDescriptor:bpd error:&err];
+    if (!bps) {
+        std::cerr << "Renderer: pipeline error: " << err.localizedDescription.UTF8String << "\n";
+        return false;
+    }
+    backgroundPipelineState_ = (void*)CFBridgingRetain(bps);
+
     // ── Depth/stencil state ───────────────────────────────────────────────────
     MTLDepthStencilDescriptor* dsd = [MTLDepthStencilDescriptor new];
     dsd.depthCompareFunction = MTLCompareFunctionLess;
     dsd.depthWriteEnabled    = YES;
     depthStencilState_ = (void*)CFBridgingRetain([dev newDepthStencilStateWithDescriptor:dsd]);
+
+    // The camera background is behind everything, so it neither tests nor writes depth
+    MTLDepthStencilDescriptor* bdsd = [MTLDepthStencilDescriptor new];
+    bdsd.depthCompareFunction = MTLCompareFunctionAlways;
+    bdsd.depthWriteEnabled    = NO;
+    backgroundDepthState_ = (void*)CFBridgingRetain([dev newDepthStencilStateWithDescriptor:bdsd]);
 
     // ── Sphere mesh ───────────────────────────────────────────────────────────
     std::vector<Vertex>   verts;
@@ -144,16 +214,20 @@ bool Renderer::init(int width, int height, const CameraIntrinsics& intrinsics) {
                        options:MTLResourceStorageModeShared]);
 
     // ── Render target textures ────────────────────────────────────────────────
+    size_t cameraBytesPerRow = 0;
+    makeSharedTexture(dev, MTLPixelFormatBGRA8Unorm, 4,
+                      MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead,
+                      width, height, outputBuffer_, outputTexture_, colorBytesPerRow_);
+    makeSharedTexture(dev, MTLPixelFormatBGRA8Unorm, 4, MTLTextureUsageShaderRead,
+                      width, height, cameraBuffer_, cameraTexture_, cameraBytesPerRow);
+    makeSharedTexture(dev, MTLPixelFormatR32Float, 4, MTLTextureUsageShaderRead,
+                      width, height, realDepthBuffer_, realDepthTexture_, depthBytesPerRow_);
+
     MTLTextureDescriptor* td = [MTLTextureDescriptor new];
-    td.width       = width;
-    td.height      = height;
-    td.storageMode = MTLStorageModeShared; // CPU-readable; free on M-series unified memory
-
-    td.pixelFormat = MTLPixelFormatBGRA8Unorm;
-    td.usage       = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
-    colorTexture_  = (void*)CFBridgingRetain([dev newTextureWithDescriptor:td]);
-
+    td.width            = width;
+    td.height           = height;
     td.pixelFormat      = MTLPixelFormatDepth32Float;
+    td.storageMode      = MTLStorageModePrivate; // never touched by the CPU
     td.usage            = MTLTextureUsageRenderTarget;
     metalDepthTexture_  = (void*)CFBridgingRetain([dev newTextureWithDescriptor:td]);
 
@@ -162,16 +236,21 @@ bool Renderer::init(int width, int height, const CameraIntrinsics& intrinsics) {
     return true;
 }
 
-cv::Mat Renderer::render() {
+cv::Mat Renderer::render(float occlusionThreshold) {
     if (!ready_) return {};
 
-    id<MTLCommandQueue>        cq  = (__bridge id<MTLCommandQueue>)ctx_.commandQueue();
-    id<MTLRenderPipelineState> ps  = (__bridge id<MTLRenderPipelineState>)pipelineState_;
-    id<MTLDepthStencilState>   dss = (__bridge id<MTLDepthStencilState>)depthStencilState_;
-    id<MTLTexture>             col = (__bridge id<MTLTexture>)colorTexture_;
-    id<MTLTexture>             dep = (__bridge id<MTLTexture>)metalDepthTexture_;
-    id<MTLBuffer>              vb  = (__bridge id<MTLBuffer>)vertexBuffer_;
-    id<MTLBuffer>              ib  = (__bridge id<MTLBuffer>)indexBuffer_;
+    id<MTLCommandQueue>        cq   = (__bridge id<MTLCommandQueue>)ctx_.commandQueue();
+    id<MTLRenderPipelineState> ps   = (__bridge id<MTLRenderPipelineState>)pipelineState_;
+    id<MTLRenderPipelineState> bps  = (__bridge id<MTLRenderPipelineState>)backgroundPipelineState_;
+    id<MTLDepthStencilState>   dss  = (__bridge id<MTLDepthStencilState>)depthStencilState_;
+    id<MTLDepthStencilState>   bdss = (__bridge id<MTLDepthStencilState>)backgroundDepthState_;
+    id<MTLTexture>             out  = (__bridge id<MTLTexture>)outputTexture_;
+    id<MTLTexture>             cam  = (__bridge id<MTLTexture>)cameraTexture_;
+    id<MTLTexture>             real = (__bridge id<MTLTexture>)realDepthTexture_;
+    id<MTLTexture>             dep  = (__bridge id<MTLTexture>)metalDepthTexture_;
+    id<MTLBuffer>              vb   = (__bridge id<MTLBuffer>)vertexBuffer_;
+    id<MTLBuffer>              ib   = (__bridge id<MTLBuffer>)indexBuffer_;
+    id<MTLBuffer>              ob   = (__bridge id<MTLBuffer>)outputBuffer_;
 
     // ── MVP ───────────────────────────────────────────────────────────────────
     // Derive vertical FOV from camera intrinsics; sphere placed 1.5 m in front, Y-up camera space
@@ -183,12 +262,12 @@ cv::Mat Renderer::render() {
     Uniforms u;
     u.mvp   = simd_mul(proj, model);
     u.color = { 1.0f, 0.45f, 0.1f, 1.0f }; // warm orange
+    u.occlusionScale = occlusionThreshold * kOcclusionReferenceDistance;
 
     // ── Render pass ───────────────────────────────────────────────────────────
     MTLRenderPassDescriptor* rpd = [MTLRenderPassDescriptor renderPassDescriptor];
-    rpd.colorAttachments[0].texture     = col;
-    rpd.colorAttachments[0].loadAction  = MTLLoadActionClear;
-    rpd.colorAttachments[0].clearColor  = MTLClearColorMake(0, 0, 0, 0); // transparent bg
+    rpd.colorAttachments[0].texture     = out;
+    rpd.colorAttachments[0].loadAction  = MTLLoadActionDontCare; // background covers every pixel
     rpd.colorAttachments[0].storeAction = MTLStoreActionStore;
     rpd.depthAttachment.texture         = dep;
     rpd.depthAttachment.loadAction      = MTLLoadActionClear;
@@ -198,11 +277,17 @@ cv::Mat Renderer::render() {
     id<MTLCommandBuffer>        cb  = [cq commandBuffer];
     id<MTLRenderCommandEncoder> enc = [cb renderCommandEncoderWithDescriptor:rpd];
 
+    [enc setRenderPipelineState:bps];
+    [enc setDepthStencilState:bdss];
+    [enc setFragmentTexture:cam atIndex:0];
+    [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
+
     [enc setRenderPipelineState:ps];
     [enc setDepthStencilState:dss];
     [enc setVertexBuffer:vb offset:0 atIndex:0];
     [enc setVertexBytes:&u  length:sizeof(u) atIndex:1];
     [enc setFragmentBytes:&u length:sizeof(u) atIndex:1];
+    [enc setFragmentTexture:real atIndex:1];
     [enc drawIndexedPrimitives:MTLPrimitiveTypeTriangle
                     indexCount:indexCount_
                      indexType:MTLIndexTypeUInt32
@@ -214,11 +299,6 @@ cv::Mat Renderer::render() {
     [cb waitUntilCompleted];
     lastGpuMs_ = (cb.GPUEndTime - cb.GPUStartTime) * 1000.0;
 
-    // ── Readback color texture → cv::Mat BGRA ────────────────────────────────
-    cv::Mat result(height_, width_, CV_8UC4);
-    [col getBytes:result.data
-      bytesPerRow:width_ * 4
-       fromRegion:MTLRegionMake2D(0, 0, width_, height_)
-      mipmapLevel:0];
-    return result;
+    // The GPU has finished, so the CPU can read its output in place
+    return cv::Mat(height_, width_, CV_8UC4, ob.contents, colorBytesPerRow_);
 }

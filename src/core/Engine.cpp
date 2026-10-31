@@ -23,7 +23,7 @@ Engine::Engine(EngineOptions opts)
     : opts_(std::move(opts)),
       profiler_({"read", "infer", "post", "render", "gpu", "occlusion", "display", "latency"},
                 kWarmupFrames),
-      camera_(1), depthEstimator_(PROJECT_ROOT "/assets/models/midas.onnx"), renderer_(ctx_)
+      camera_(0), depthEstimator_(PROJECT_ROOT "/assets/models/midas.onnx"), renderer_(ctx_)
 {
 }
 
@@ -74,26 +74,36 @@ bool Engine::processFrame(Frame &frame)
         profiler_.record("post", Ms(Clock::now() - tp).count());
     }
 
-    if (hasMetal_)
-    {
-        auto tr = Clock::now();
-        frame.rendered = renderer_.render();
-        profiler_.record("render", Ms(Clock::now() - tr).count());
-        profiler_.record("gpu", renderer_.lastGpuMs());
-    }
-
     if (hasMetal_ && hasDepth_)
     {
         auto to = Clock::now();
-        frame.occluded = occlusionPass_.apply(
-            frame.rendered, frame.depthSmoothed, occlusionThreshold_);
+        occlusionPass_.apply(frame.depthSmoothed, renderer_.depthInput());
         profiler_.record("occlusion", Ms(Clock::now() - to).count());
+    }
+
+    if (hasMetal_)
+    {
+        auto tr = Clock::now();
+        cv::Mat cameraInput = renderer_.cameraInput();
+        if (frame.image.size() == cameraInput.size())
+        {
+            cv::cvtColor(frame.image, cameraInput, cv::COLOR_BGR2BGRA);
+        }
+        else
+        {
+            cv::Mat resized;
+            cv::resize(frame.image, resized, cameraInput.size());
+            cv::cvtColor(resized, cameraInput, cv::COLOR_BGR2BGRA);
+        }
+        frame.composited = renderer_.render(occlusionThreshold_);
+        profiler_.record("render", Ms(Clock::now() - tr).count());
+        profiler_.record("gpu", renderer_.lastGpuMs());
     }
 
     return true;
 }
 
-void Engine::updateDisplay(const Frame &frame)
+void Engine::updateDisplay(Frame &frame)
 {
 
     if (hasDepth_ && !frame.depthSmoothed.empty())
@@ -104,21 +114,13 @@ void Engine::updateDisplay(const Frame &frame)
         cv::imshow("Depth Map", depthVis);
     }
 
-    // Use occluded result when available, fall back to raw render
-    const cv::Mat &composite = (!frame.occluded.empty()) ? frame.occluded : frame.rendered;
-    if (hasMetal_ && !composite.empty())
+    if (hasMetal_ && !frame.composited.empty())
     {
-        std::vector<cv::Mat> ch(4);
-        cv::split(composite, ch); // [B, G, R, A]
-        cv::Mat sphereBGR;
-        cv::merge(std::vector<cv::Mat>{ch[0], ch[1], ch[2]}, sphereBGR);
-        cv::Mat arView = frame.image.clone();
-        sphereBGR.copyTo(arView, ch[3]);
-        cv::putText(arView,
+        cv::putText(frame.composited,
                     "Threshold: " + std::to_string(occlusionThreshold_).substr(0, 4),
                     cv::Point(10, 30), cv::FONT_HERSHEY_SIMPLEX,
-                    0.7, cv::Scalar(0, 255, 255), 2);
-        cv::imshow("AR View", arView);
+                    0.7, cv::Scalar(0, 255, 255, 255), 2);
+        cv::imshow("AR View", frame.composited);
     }
 }
 

@@ -18,9 +18,16 @@ public:
     float sphereY() const { return sphereY_; }
     float sphereZ() const { return sphereZ_; }
 
-    // Renders a procedural sphere. Returns BGRA CV_8UC4 mat,
-    // alpha=255 where sphere geometry exists, alpha=0 elsewhere.
-    cv::Mat render();
+    // Write this frame's inputs into these before render(). Both wrap memory shared
+    // with the GPU, so writing to them directly avoids a separate upload.
+    cv::Mat cameraInput() const; // BGRA CV_8UC4
+    cv::Mat depthInput()  const; // CV_32F [0,1], 1 = closest
+
+    // Draws the camera frame, then the sphere, hiding sphere pixels where the real
+    // surface is closer. occlusionThreshold is the real depth value treated as being
+    // the sphere's starting distance. The returned BGRA CV_8UC4 mat wraps the GPU
+    // output memory and stays valid until the next render().
+    cv::Mat render(float occlusionThreshold);
 
     // GPU execution time of the last render() command buffer, excluding readback
     double lastGpuMs() const { return lastGpuMs_; }
@@ -38,10 +45,20 @@ private:
     float sphereY_ =  0.0f;
     float sphereZ_ = -1.5f;
 
-    void* pipelineState_     = nullptr;
-    void* depthStencilState_ = nullptr;
-    void* vertexBuffer_      = nullptr;
-    void* indexBuffer_       = nullptr;
-    void* colorTexture_      = nullptr;
-    void* metalDepthTexture_ = nullptr;
+    size_t colorBytesPerRow_ = 0;
+    size_t depthBytesPerRow_ = 0;
+
+    void* pipelineState_           = nullptr;
+    void* backgroundPipelineState_ = nullptr;
+    void* depthStencilState_       = nullptr;
+    void* backgroundDepthState_    = nullptr;
+    void* vertexBuffer_            = nullptr;
+    void* indexBuffer_             = nullptr;
+    void* outputBuffer_            = nullptr;
+    void* cameraBuffer_            = nullptr;
+    void* realDepthBuffer_         = nullptr;
+    void* outputTexture_           = nullptr;
+    void* cameraTexture_           = nullptr;
+    void* realDepthTexture_        = nullptr;
+    void* metalDepthTexture_       = nullptr;
 };

@@ -3,9 +3,6 @@
 #include <algorithm>
 #include <iostream>
 
-static constexpr float kMean[3] = {0.485f, 0.456f, 0.406f};
-static constexpr float kStd[3]  = {0.229f, 0.224f, 0.225f};
-
 DepthEstimator::DepthEstimator(const std::string& modelPath)
     : modelPath_(modelPath)
     , env_(ORT_LOGGING_LEVEL_WARNING, "DepthEstimator")
@@ -48,15 +45,15 @@ std::vector<float> DepthEstimator::preprocess(const cv::Mat& bgr) const {
     cv::cvtColor(resized, rgb, cv::COLOR_BGR2RGB);
     rgb.convertTo(rgb, CV_32F, 1.0 / 255.0);
 
-    // HWC -> CHW with ImageNet normalization
+    // HWC -> CHW. Values stay in [0, 1]: the ONNX graph applies ImageNet mean/std
+    // itself in its first nodes, so normalizing here would apply them twice.
     std::vector<float> blob(3 * inputH_ * inputW_);
     const int plane = inputH_ * inputW_;
     for (int c = 0; c < 3; ++c) {
         for (int y = 0; y < inputH_; ++y) {
             const float* row = rgb.ptr<float>(y);
             for (int x = 0; x < inputW_; ++x) {
-                blob[c * plane + y * inputW_ + x] =
-                    (row[x * 3 + c] - kMean[c]) / kStd[c];
+                blob[c * plane + y * inputW_ + x] = row[x * 3 + c];
             }
         }
     }

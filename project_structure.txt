@@ -5,6 +5,8 @@ perceptual_occlusion/
 ├── CMakeLists.txt
 ├── README.md
 │
+├── inference/        (benchmark CSVs written by bench.sh, not tracked by git)
+│
 ├── assets/
 │   ├── models/
 │   │   └── midas.onnx
@@ -65,17 +67,16 @@ Module-by-Module Breakdown
 
 6. rendering/Renderer
 - Handles GPU rendering pipeline
-- Uploads camera frame and depth map as textures
-- Renders virtual objects
+- Shares camera frame and depth map with the GPU through shared-memory textures
+- Renders the camera background and virtual objects
+- Occlusion test and compositing run in the fragment shader
 
 7. rendering/MetalContext
 - Initializes Metal device and command queue
 - Manages pipeline states and shader execution
 
 8. compositing/OcclusionPass
-- Performs depth comparison between real and virtual scene
-- Executes fragment shader for occlusion masking
-- Produces final composited frame
+- Cleans up the real depth map (morphological close) for the shader's depth comparison
 
 Key Responsibilities:
 - Maintain low latency

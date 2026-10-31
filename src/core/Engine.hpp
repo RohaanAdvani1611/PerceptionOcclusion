@@ -22,7 +22,7 @@ public:
 private:
     bool initSystems();
     bool processFrame(Frame& frame);
-    void updateDisplay(const Frame& frame);
+    void updateDisplay(Frame& frame);
     void handleInput(int key);
 
     EngineOptions      opts_;
