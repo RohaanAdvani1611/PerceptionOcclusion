@@ -5,8 +5,17 @@ build-release/
 # Benchmark results (bench.sh / --csv)
 *.csv
 
+# Core ML work: Python environment, downloads, camera frames, generated models
+coreml/.venv/
+coreml/third_party/
+coreml/data/
+coreml/models/
+
 # Editor / clangd index
 .cache/
 
 # macOS
 .DS_Store
+
+# Python bytecode
+__pycache__/
