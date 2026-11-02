@@ -1,6 +1,6 @@
 # MiDaS on Core ML: implementation plan
 
-**Status: awaiting your approval. No code, installs or project changes happen until you approve.**
+**Status: approved on 2026-11-01. Implementation starts on your go-ahead.**
 
 **Goal:** convert MiDaS v2.1 small to Core ML, compare four compressed variants on size, latency, accuracy and compute-unit placement, and run them on live camera frames in a small Swift app, on the M2 Mac first and then the iPhone 14.
 
@@ -11,7 +11,7 @@ All new work stays in `coreml/`. The only existing file this plan changes is `.g
 | Item | Value | How it affects the plan |
 |---|---|---|
 | Mac | MacBook Air M2 (`Mac14,15`), 8 GB, macOS 15.6.1 | It has no fan, so long runs will likely slow down from heat. Memory is tight, so close other apps while benchmarking. |
-| iPhone | iPhone 14 (A15), iOS version not yet confirmed | iOS 17.4 or later is needed for per-op placement data. |
+| iPhone | iPhone 14 (A15), iOS 27.0.1 | Meets the iOS 17.4 minimum for per-op placement data. It's newer than Xcode 26.3's iOS 26.2 SDK, but a test app installed and ran on it, so no upgrade is needed. |
 | Xcode | 26.3 with Swift 6.2.4; first-launch setup is done | No install needed. |
 | Default Python | 3.15.1 | Too new for coremltools, so we use a separate 3.12 environment. |
 | coremltools | 9.0, the latest; wheels up to Python 3.13; notes list PyTorch 2.7 | We pin PyTorch to 2.7, not the latest 2.15. |
@@ -33,11 +33,11 @@ Each phase ends with a check for you to confirm before the next starts.
 
 | Phase | Work | Estimate |
 |---|---|---|
-| 3 | Environment, MiDaS source, conversion, numerical check | 2–4 hours |
+| 3 | Environment, MiDaS source, capture frames, conversion, numerical check | 2–4 hours |
 | 4 | ANE placement analysis | 1–3 hours |
-| 5 | Capture frames, compress, evaluate accuracy | 2–3 hours |
+| 5 | Compress, evaluate accuracy | 2–3 hours |
 | 6 | Swift app on Mac, with live view and benchmark mode | 3–5 hours |
-| 7 | Mac benchmarks, performance reports, soak test | 2–3 hours |
+| 7 | ONNX timing runner, Mac benchmarks, performance reports, soak test | 2–3 hours |
 | 8 | Deploy to iPhone 14 and compare | 2–4 hours |
 | 9 | `RESULTS.md` and talking points | 1–2 hours |
 | Optional | Temporal filter or occlusion demo in the app | 2–4 hours |
@@ -46,7 +46,7 @@ Most of the uncertainty is in Phase 4 and in signing during Phase 8.
 
 ## 1. Conversion
 
-**Setup.** Create `coreml/.venv` with Python 3.12 and pinned versions: `torch==2.7.*`, `coremltools==9.0`, and the other packages listed in `coreml/requirements.txt`.
+**Setup.** Create `coreml/.venv` with Python 3.12 and pinned versions: `torch==2.7.0`, `coremltools==9.0`, and the other packages listed in `coreml/requirements.txt`. Exact source versions are in `coreml/VERSIONS.md`.
 
 **Source.** Clone the official MiDaS repo into `coreml/third_party/`, record the commit, and build `MidasNet_small` directly with the official weights. Its backbone comes from `rwightman/gen-efficientnet-pytorch` through `torch.hub`, so that revision gets pinned too.
 
@@ -83,7 +83,7 @@ We use image input because it suits a camera app and is what you came to learn. 
 | PyTorch vs Core ML FP32 on CPU | Pearson above 0.9999 | Proves the conversion is right |
 | FP32 vs FP16 on CPU | Pearson above 0.999 | Measures the precision loss |
 | FP16 on CPU vs GPU vs ANE | Report the values | Different processors give slightly different numbers |
-| PyTorch vs corrected ONNX | Report the values | Measures the `align_corners` gap from Phase 0 |
+| PyTorch vs corrected ONNX | Report the values | Measures the resize gap. An early check on 8 demo frames found a Pearson of about 0.956, even though the shared weights are identical |
 
 These thresholds are starting targets I chose, not published limits. If the first comparison fails, nothing else proceeds.
 
@@ -93,7 +93,7 @@ These thresholds are starting targets I chose, not published limits. If the firs
 
 **How we find out where ops run.** We use three sources, because no single one gives the full picture:
 
-1. **`MLComputePlan`** (a Swift tool) lists each op's preferred and supported devices and its estimated cost. This produces the "% on ANE" figure.
+1. **`MLComputePlan`** lists each op's preferred and supported devices and its estimated cost, which produces the "% on ANE" figure. Phase 4 uses the coremltools Python bindings, because the app doesn't exist yet. If they don't give enough detail, a small standalone Swift tool will.
 2. **Xcode's performance report** gives the same picture visually, with measured load and prediction time.
 3. **Measured latency under each compute unit.** If `.cpuAndNeuralEngine` is about as fast as `.cpuOnly`, the ANE isn't doing much, whatever the plan says.
 
@@ -121,7 +121,7 @@ Any model change here becomes its own named experiment, with accuracy measured, 
 
 ## 3. Compression variants
 
-Everything is built from the same FP16 model using `coremltools.optimize.coreml`. Sizes are my estimates from the 16.7M parameters. Real numbers replace them in `RESULTS.md`.
+Everything is built from the same FP16 model using `coremltools.optimize.coreml`. Sizes are my estimates from the 16.6M parameters that `forward()` actually uses. The checkpoint has 21.3M, but one 4.7M block is never run. Real numbers replace them in `RESULTS.md`.
 
 | Variant | How | Data needed | Estimated size |
 |---|---|---|---|
@@ -132,7 +132,7 @@ Everything is built from the same FP16 model using `coremltools.optimize.coreml`
 
 **What to expect on your hardware.** Coremltools' docs say int8-int8 ANE compute arrives from iPhone 15 Pro onwards, so neither the M2 nor the A15 has it. W8A8 is an experiment. It may run with no speedup, or even more slowly, and it may lose accuracy. Any of those is a useful result if we can explain it.
 
-**Calibration frames.** `coreml/capture_frames.py` saves frames from your webcam, from a few different scenes and lighting conditions.
+**Calibration frames.** These are captured in Phase 3, because the conversion check needs them too. `coreml/capture_frames.py` saves frames from your webcam, from a few different scenes and lighting conditions.
 - **Calibration set:** 150 frames. These set the activation ranges.
 - **Held-out set:** 100 frames from different scenes. Used only for accuracy, since testing on calibration frames would flatter W8A8.
 - **Privacy:** these are pictures of your room, so they stay local and are gitignored.
@@ -254,7 +254,7 @@ Only after the main results are done, and only if you want them:
 | W8A8 accuracy drops sharply | Try different calibration frames and per-op exclusions, then report the result |
 | Image output is awkward | Use `MLMultiArray` output and accept a copy |
 | iPhone signing or Developer Mode problems | Step-by-step fixes in Phase 8. Mac results stand regardless |
-| iPhone is below iOS 17.4 | Update it, or rely on Xcode's report and latency for placement |
+| A real app hits an iOS 27 problem on Xcode 26.3 that the blank test app didn't | Upgrade to macOS Tahoe 26.6 and Xcode 27, and rerun any Mac benchmarks taken before the upgrade |
 | Heat skews benchmarks on the fanless Air | Cooldowns, logged thermal state, and a rerun of anything taken while hot |
 | 8 GB of memory runs short during conversion | Close other apps and convert one variant at a time |
 
