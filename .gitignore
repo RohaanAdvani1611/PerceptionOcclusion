@@ -10,6 +10,8 @@ coreml/.venv/
 coreml/third_party/
 coreml/data/
 coreml/models/
+# Result images show the captured frames, which are private
+coreml/results/*.png
 
 # Editor / clangd index
 .cache/

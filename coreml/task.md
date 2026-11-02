@@ -24,13 +24,13 @@ See [PLAN.md](PLAN.md) for details. Tasks marked **(You)** need you at the keybo
 - [x] 5. Write `capture_frames.py`
 - [x] 6. **(You)** Capture 150 calibration frames and 100 held-out frames, from different scenes
 
-## Stage 2: Convert (Phase 3)
+## Stage 2: Convert (Phase 3) (done)
 
-- [ ] 7. Wrap the model so normalization happens exactly once, with image input and Float16 image output
-- [ ] 8. Convert it to an FP32 reference model and an FP16 baseline
-- [ ] 9. Check Core ML against PyTorch on the same frames (if this fails, stop and debug)
-- [ ] 10. Compare PyTorch with the corrected ONNX model to measure the `align_corners` gap
-- [ ] 11. **(You)** Open the `.mlpackage` in Xcode and confirm its inputs and outputs
+- [x] 7. Wrap the model so normalization happens exactly once, with image input and Float16 image output
+- [x] 8. Convert it to an FP32 reference model and an FP16 baseline
+- [x] 9. Check Core ML against PyTorch on the same frames (if this fails, stop and debug)
+- [x] 10. Compare PyTorch with the corrected ONNX model to measure the resize gap
+- [x] 11. **(You)** Open the `.mlpackage` in Xcode and confirm its inputs and outputs
 
 ## Stage 3: Neural Engine analysis (Phase 4)
 

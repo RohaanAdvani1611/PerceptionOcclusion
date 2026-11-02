@@ -1,0 +1,63 @@
+"""Converts MiDaS small to Core ML. Run: python convert.py
+
+Writes to coreml/models/:
+  midas_small_fp32.mlpackage  reference for numerical checks only, with a tensor output
+  midas_small_fp16.mlpackage  the baseline the app uses, with a Float16 grayscale image output
+"""
+import time
+
+import coremltools as ct
+import torch
+
+from midas_loader import INPUT_SIZE, MODELS_DIR, MidasForCoreML, load_frames, load_midas_small, to_wrapper_input
+
+SHAPE = (1, 3, INPUT_SIZE, INPUT_SIZE)
+
+
+def convert(traced, precision, output):
+    start = time.perf_counter()
+    mlmodel = ct.convert(
+        traced,
+        convert_to="mlprogram",
+        # Camera frames arrive as BGRA, so declaring BGR lets Core ML take them without a
+        # colour conversion. scale=1/255 is the only preprocessing Core ML applies.
+        inputs=[ct.ImageType(name="image", shape=SHAPE, scale=1 / 255.0, color_layout=ct.colorlayout.BGR)],
+        outputs=[output],
+        compute_precision=precision,
+        minimum_deployment_target=ct.target.iOS17,
+    )
+    mlmodel.author = "MiDaS v2.1 small (Intel ISL), converted with coremltools"
+    mlmodel.short_description = "Relative inverse depth: larger values are closer. Scale and shift are unknown."
+    mlmodel.input_description["image"] = "256x256 BGR frame, stretched from the camera image"
+    mlmodel.output_description["depth"] = "256x256 relative inverse depth"
+    print(f"  converted in {time.perf_counter() - start:.1f} s")
+    return mlmodel
+
+
+def main():
+    MODELS_DIR.mkdir(exist_ok=True)
+    wrapper = MidasForCoreML(load_midas_small()).eval()
+    example = to_wrapper_input(load_frames("calibration")[0][1])
+    with torch.no_grad():
+        # The backbone's "same" padding works out its sizes on the first run and caches them.
+        # Running once first means the trace records fixed padding instead of shape arithmetic.
+        wrapper(example)
+        traced = torch.jit.trace(wrapper, example)
+
+    print("FP32 reference")
+    fp32 = convert(traced, ct.precision.FLOAT32, ct.TensorType(name="depth"))
+    fp32.save(str(MODELS_DIR / "midas_small_fp32.mlpackage"))
+
+    print("FP16 baseline")
+    fp16 = convert(traced, ct.precision.FLOAT16,
+                   ct.ImageType(name="depth", color_layout=ct.colorlayout.GRAYSCALE_FLOAT16))
+    fp16.save(str(MODELS_DIR / "midas_small_fp16.mlpackage"))
+
+    for name in ("midas_small_fp32", "midas_small_fp16"):
+        path = MODELS_DIR / f"{name}.mlpackage"
+        size = sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
+        print(f"{name}.mlpackage: {size / 1e6:.1f} MB")
+
+
+if __name__ == "__main__":
+    main()

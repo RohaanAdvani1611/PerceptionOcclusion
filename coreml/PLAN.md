@@ -87,6 +87,20 @@ We use image input because it suits a camera app and is what you came to learn. 
 
 These thresholds are starting targets I chose, not published limits. If the first comparison fails, nothing else proceeds.
 
+**Results (2026-11-02, `check_conversion.py`, all 250 captured frames):**
+
+| Comparison | Pearson mean | Worst frame | Status |
+|---|---|---|---|
+| PyTorch vs Core ML FP32 on CPU | 1.000000 | 1.000000 | Pass |
+| FP32 vs FP16 on CPU | 0.999861 | 0.997267 | Below target on 7 frames |
+| FP32 vs FP16 on CPU and GPU | 0.999976 | 0.999211 | Pass |
+| FP32 vs FP16 on CPU and Neural Engine | 0.999976 | 0.999169 | Pass |
+| PyTorch vs the C++ pipeline's ONNX | 0.974415 | 0.866563 | The resize gap, worst on a blank wall |
+
+- **FP16 on the CPU alone** loses more precision than on the GPU or Neural Engine, as small errors spread across the whole image, with no overflow. Task 14 investigates this. The baseline stays FP16, since the processors the app uses pass.
+- **Tracing:** the backbone caches its "same" padding sizes on its first run, so `convert.py` runs the model once before tracing. Otherwise the first trace records shape arithmetic and PyTorch's trace check fails.
+- **Size:** the FP16 package is 33.3 MB, confirming that the unused 4.7M-parameter block is dropped.
+
 **Phase 3 check:** the `.mlpackage` opens in Xcode showing the expected inputs and outputs, the script prints passing values, and a side-by-side depth image looks right.
 
 ## 2. Neural Engine fit
