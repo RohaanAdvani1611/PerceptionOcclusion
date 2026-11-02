@@ -133,6 +133,33 @@ Any model change here becomes its own named experiment, with accuracy measured, 
 
 **Phase 4 check:** a per-op table showing the device for each op and an explanation for each one not on the ANE.
 
+**Results (2026-11-02, FP16 on the M2):**
+
+| Model | Compute units | Ops on ANE | Cost on ANE | Device switches |
+|---|---|---|---|---|
+| First baseline, `scale=1/255` on the image input | `.cpuAndNeuralEngine` and `.all` | 202 of 204 (99.0%) | 98.7% | 1 |
+| **Current baseline**, 1/255 inside the model | `.cpuAndNeuralEngine` and `.all` | **202 of 202 (100%)** | **100%** | **0** |
+
+`.all` chose the ANE over the GPU in both.
+
+**Xcode performance report, current baseline, M2 on macOS 15.6.1, one run each (2026-11-02):**
+
+| Compute units | Prediction (median) | Load (median) | Compilation (median) | Ops: CPU / GPU / ANE |
+|---|---|---|---|---|
+| All | 2.20 ms | 26.54 ms | 94.10 ms | 0 / 0 / 202 |
+| CPU and Neural Engine | 1.80 ms | 23.03 ms | 95.85 ms | 0 / 0 / 202 |
+
+Xcode agrees with `MLComputePlan`: every op is on the ANE. Against the ONNX baseline, `session.Run` took about 40 ms and loading took 97.5 ms. The 0.4 ms gap between the two settings comes from a single run each, so Stage 6 checks it with repeated measurements before drawing a conclusion.
+
+**Baseline decision (2026-11-02):** the 1/255 scale moved into the model, making it 100% ANE. The first baseline is kept as `models/experiments/midas_small_fp16_scale_outside.mlpackage` for the before-and-after comparison. The Stage 2 numbers above are from the first baseline. With the current one, on the ANE against FP32 across all 250 frames: Pearson mean 0.999978 (was 0.999976), closer to FP32 on 152 of 250 frames, and mean absolute error 1.10 (was 1.21). Its worst frame, `bedroom_0042`, fell from 0.99930 to 0.99819, the only frame below 0.999 on the GPU and ANE. That frame is also the worst on the CPU, where the worst is now 0.99633 on 11 frames (was 0.99727 on 7). A simulation of the FP16 normalization step shows both versions err by about 0.0003 on average, so no single step got worse: the rounding falls differently, and the final layer magnifies it on a few frames.
+
+- **Every model op is on the ANE,** including the 5 asymmetric `pad` ops and the `align_corners=True` resizes this plan worried about. Conversion folded all 72 BatchNorms into convolutions. Per-op table: `results/placement_midas_small_fp16.csv`.
+- **The only 2 CPU ops are Core ML's own input handling.** `ImageType(scale=1/255)` makes Core ML scale the image in FP32 (`mul`) and then convert it to FP16 (`cast`), and the ANE runs neither. Folding the 1/255 into the model's normalization removes both, giving 202 of 202 ops on the ANE with unchanged accuracy (worst frame 0.99967 against the baseline). In Python it saved only 0.03 ms of about 1.96 ms, which is within noise. An FP16 tensor input also removes them and saved 0.10 ms, but moves frame conversion into the app (`experiment_input_ops.py`).
+- **FP16 overflow:** none. The largest activation over all 250 frames is 7,277, in the output head, against FP16's limit of 65,504. The backbone stays under 124.
+- **Why FP16 on the CPU is less accurate:** on the CPU, an FP16 convolution's error grows with the number of inputs it sums: 0.04% at 16, 0.7% at 1,024 and 7% at 4,096, matching a simulated FP16 running sum. On the GPU and ANE it stays at about 0.02%, the rounding of the result alone, so they sum in higher precision. Comparing each stage of the network shows the CPU's extra error from the first backbone stage onwards. Every device loses most at the final 32-to-1 convolution, where large positive and negative values cancel.
+- **Small ops go to the CPU even when the ANE is allowed:** a lone 1×1 convolution on a 16×16 input stayed on the CPU under `.cpuAndNeuralEngine`, which is Core ML's cost model at work.
+- **Wrapper arithmetic order matters in FP16:** subtracting the mean before multiplying gave a CPU worst frame of 0.9973, and multiplying first gave 0.9929. The wrapper subtracts first.
+
 ## 3. Compression variants
 
 Everything is built from the same FP16 model using `coremltools.optimize.coreml`. Sizes are my estimates from the 16.6M parameters that `forward()` actually uses. The checkpoint has 21.3M, but one 4.7M block is never run. Real numbers replace them in `RESULTS.md`.

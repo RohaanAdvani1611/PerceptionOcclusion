@@ -49,22 +49,30 @@ def load_midas_small():
 class MidasForCoreML(torch.nn.Module):
     """MiDaS with normalization built in, shaped for Core ML image input and output.
 
-    Input: 1x3x256x256 BGR in [0, 1]. Core ML's image input supplies this from a BGRA
-    camera buffer by scaling with 1/255, which is the only step it can do, since it has
-    one scale for all channels and ImageNet has three. Channel order and mean/std
-    happen here, exactly once.
+    Input: 1x3x256x256 BGR pixel values, 0-255, exactly what Core ML's image input gives
+    from a BGRA camera buffer when no scale is set. Channel order, the 1/255 scale and
+    mean/std all happen here, exactly once.
     Output: 1x1x256x256 relative inverse depth, the shape a grayscale image output needs.
+
+    input_range=1.0 rebuilds the first baseline, which took 0-1 input from an image input
+    with scale=1/255. Core ML applied that scale with two CPU ops in front of the model
+    (task 15 in task.md), so the 1/255 now lives here and the model runs fully on the ANE.
     """
 
-    def __init__(self, midas):
+    def __init__(self, midas, input_range=255.0):
         super().__init__()
         self.midas = midas
-        self.register_buffer("mean", torch.tensor(IMAGENET_MEAN).view(1, 3, 1, 1))
-        self.register_buffer("inv_std", 1.0 / torch.tensor(IMAGENET_STD).view(1, 3, 1, 1))
+        mean = torch.tensor(IMAGENET_MEAN).view(1, 3, 1, 1)
+        std = torch.tensor(IMAGENET_STD).view(1, 3, 1, 1)
+        # (x / input_range - mean) / std as one subtract then one multiply. Subtracting first
+        # loses less precision in FP16 than multiplying first: on the CPU, the worst frame's
+        # Pearson against FP32 was 0.9973 this way and 0.9929 the other way.
+        self.register_buffer("offset", input_range * mean)
+        self.register_buffer("gain", 1.0 / (input_range * std))
 
     def forward(self, bgr):
         rgb = torch.flip(bgr, dims=[1])
-        return self.midas((rgb - self.mean) * self.inv_std).unsqueeze(1)
+        return self.midas((rgb - self.offset) * self.gain).unsqueeze(1)
 
 
 def load_frames(set_name):
@@ -80,6 +88,6 @@ def load_frames(set_name):
 
 
 def to_wrapper_input(rgb):
-    """256x256 RGB uint8 -> the 1x3x256x256 BGR [0, 1] tensor MidasForCoreML expects."""
-    bgr = rgb[:, :, ::-1].astype(np.float32) / 255.0
+    """256x256 RGB uint8 -> the 1x3x256x256 BGR 0-255 tensor MidasForCoreML expects."""
+    bgr = rgb[:, :, ::-1].astype(np.float32)
     return torch.from_numpy(np.ascontiguousarray(bgr.transpose(2, 0, 1)))[None]

@@ -32,12 +32,12 @@ See [PLAN.md](PLAN.md) for details. Tasks marked **(You)** need you at the keybo
 - [x] 10. Compare PyTorch with the corrected ONNX model to measure the resize gap
 - [x] 11. **(You)** Open the `.mlpackage` in Xcode and confirm its inputs and outputs
 
-## Stage 3: Neural Engine analysis (Phase 4)
+## Stage 3: Neural Engine analysis (Phase 4) (done)
 
-- [ ] 12. Generate the per-op placement table, by op count and by estimated cost
-- [ ] 13. **(You)** Run Xcode's performance report on the baseline
-- [ ] 14. Check FP16 for overflow and `inf` or `NaN`, including on the worst frame
-- [ ] 15. Explain every op that isn't on the Neural Engine, and run a separate experiment for any fallback worth fixing
+- [x] 12. Generate the per-op placement table, by op count and by estimated cost
+- [x] 13. **(You)** Run Xcode's performance report on the baseline
+- [x] 14. Check FP16 for overflow and `inf` or `NaN`, including on the worst frame
+- [x] 15. Explain every op that isn't on the Neural Engine, and run a separate experiment for any fallback worth fixing
 
 ## Stage 4: Compress and evaluate (Phase 5)
 
