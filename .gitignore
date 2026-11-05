@@ -10,12 +10,18 @@ coreml/.venv/
 coreml/third_party/
 coreml/data/
 coreml/models/
+# Copies of coreml/models/ bundled into the app, and its benchmark frames (private)
+coreml/DepthCam/DepthCam/Models/
+coreml/DepthCam/DepthCam/BenchFrames/
 # Result images show the captured frames, which are private. Result tables are kept.
 coreml/results/**/*.png
 !coreml/results/*.csv
 
 # Editor / clangd index
 .cache/
+
+# Xcode per-user state (window layout, scheme choices)
+xcuserdata/
 
 # macOS
 .DS_Store

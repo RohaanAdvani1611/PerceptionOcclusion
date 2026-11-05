@@ -278,6 +278,14 @@ Camera (BGRA CVPixelBuffer, IOSurface-backed)
 
 **Mac first, iPhone second.** The Mac build uses "Sign to Run Locally" with no Apple ID. The iPhone needs a free Apple ID, a cable and Developer Mode, and free signing expires after 7 days, after which you simply reinstall.
 
+**As built (2026-11-05):**
+- **Models:** the four `.mlpackage` files are copied into `DepthCam/DepthCam/Models/` (gitignored), and Xcode compiles them into the app.
+- **Shader:** compiled when the app starts, from source inside `DepthRenderer.swift`. Xcode 26 ships the offline Metal compiler as a separate ~700 MB download, and this avoids needing it.
+- **Resize:** vImage resamples with a Lanczos filter, not bilinear like `cv::resize`, so the app's input differs slightly from the Python scripts'. The benchmark uses frames already resized in Python (`export_bench_frames.py`), so its timings use exactly the frames `evaluate.py` measured.
+- **Camera size:** the Mac's FaceTime camera ignores the `.vga640x480` preset and sent 1920×1080, which made the resize take about 7.5 ms and squashed the 16:9 picture. The app now picks the camera's 640×480 format directly, after the session is configured. On the Mac, it also asks the video output for 640×480.
+- **Live timings** leave out the first 10 predictions after each load, which are slow while the model warms up. One included warm-up frame had pushed the live p99 to 249 ms.
+- **Benchmark mode:** writes `benchmark_<device>_<time>.csv` to the app's Documents folder. On the Mac, that's `~/Library/Containers/com.rohaanadvani.DepthCam/Data/Documents/`.
+
 **Phase 6 check:** the app shows live depth from the FaceTime camera, labels show FPS and latency, and switching variants changes file size and timing.
 
 ## 7. Optional stretch

@@ -46,14 +46,14 @@ See [PLAN.md](PLAN.md) for details. Tasks marked **(You)** need you at the keybo
 - [x] 18. Generate side-by-side images, including each version's worst frame
 - [x] 19. **(You)** Inspect the images and accuracy table
 
-## Stage 5: Swift app on Mac (Phase 6)
+## Stage 5: Swift app on Mac (Phase 6) (done)
 
-- [ ] 20. **(You)** Create the `DepthCam` Xcode project using the click-by-click steps
-- [ ] 21. Write the camera capture with frame dropping, plus the vImage resize
-- [ ] 22. Write the model loading and the Metal depth display
-- [ ] 23. Add the FPS and latency labels, plus the model and compute-unit pickers
-- [ ] 24. Add the benchmark mode and `MLComputePlan` report
-- [ ] 25. **(You)** Run the app, allow camera access, and confirm live depth and model switching work
+- [x] 20. **(You)** Create the `DepthCam` Xcode project using the click-by-click steps
+- [x] 21. Write the camera capture with frame dropping, plus the vImage resize
+- [x] 22. Write the model loading and the Metal depth display
+- [x] 23. Add the FPS and latency labels, plus the model and compute-unit pickers
+- [x] 24. Add the benchmark mode and `MLComputePlan` report
+- [x] 25. **(You)** Run the app, allow camera access, and confirm live depth and model switching work
 
 ## Stage 6: Mac benchmarks (Phase 7)
 
