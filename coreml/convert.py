@@ -27,7 +27,7 @@ def trace(wrapper, example):
         return torch.jit.trace(wrapper, example)
 
 
-def convert(traced, precision, output, image_input=IMAGE_INPUT):
+def convert(traced, precision, output, image_input=IMAGE_INPUT, target=ct.target.iOS17):
     start = time.perf_counter()
     mlmodel = ct.convert(
         traced,
@@ -35,7 +35,7 @@ def convert(traced, precision, output, image_input=IMAGE_INPUT):
         inputs=[image_input],
         outputs=[output],
         compute_precision=precision,
-        minimum_deployment_target=ct.target.iOS17,
+        minimum_deployment_target=target,
     )
     mlmodel.author = "MiDaS v2.1 small (Intel ISL), converted with coremltools"
     mlmodel.short_description = "Relative inverse depth: larger values are closer. Scale and shift are unknown."

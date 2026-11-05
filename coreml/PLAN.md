@@ -198,6 +198,26 @@ We report the mean and the worst frame. AbsRel divides by the reference depth, a
 
 **Phase 5 check:** four `.mlpackage` files exist with real sizes, plus an accuracy table and images you can inspect.
 
+**Results (2026-11-03, 100 held-out frames, `.cpuAndNeuralEngine`, against PyTorch FP32; `results/accuracy.csv`):**
+
+| Version | Size | Broken frames | AbsRel mean (worst) | Mask flips mean (worst) | Python p50 |
+|---|---|---|---|---|---|
+| FP16 | 33.3 MB | 0 | 0.23% (1.7%) | 0.17% (3.1%) | ~1.9 ms |
+| W8, head FP16 | 16.9 MB | 0 | 1.68% (10.3%) | 1.05% (11.9%) | ~1.9 ms |
+| P6 | 12.7 MB | 0 | 7.43% (27.0%) | 4.58% (22.9%) | ~1.75 ms |
+| W8A8 | 17.0 MB | 0 | 12.01% (42.4%) | 8.91% (86.8%) | ~1.55 ms |
+| ONNX (C++ pipeline) | — | 0 | 12.45% (58.9%) | 6.73% (43.3%) | — |
+
+All Core ML versions run 100% on the ANE. Python timings are rough, and Stage 6 measures properly.
+
+- **W8 with every weight 8-bit breaks on the ANE:** 48 of 100 frames contain inf or NaN, though the same model is fine on the CPU and GPU. Probing each stage shows the failure starts in the output head's two 3×3 convs, which carry the network's largest activations. A test of whether the ANE sums whole-number weights before scaling predicted overflow on every frame, and was ruled out. Keeping those two convs FP16 fixes it for about 28 KB (`compress.py`). The naive version is kept as `experiments/midas_small_w8_naive`.
+- **Losses come from the compression, not the ANE:** each version's accuracy is about the same on the ANE, GPU and CPU.
+- **AbsRel exaggerates far regions:** it divides by inverse depth, which is small far away. W8's and P6's worst frames show errors in a far patch with almost no mask flips. Mask flips is the measure that matters for the app.
+- **W8A8 loses its accuracy in its activations, not its weights**, and the cause is unresolved. A8 alone (FP16 weights) is as bad. Keeping FP16 activations in the output head, the whole decoder, or every `add` barely helps (8.1–9.1% flips), so the loss is in the backbone. A PyTorch simulation of coremltools' rule, which rounds only the inputs of `conv`, `add` and pooling ops, reaches only 2.2% flips against Core ML's 8.5%, so it misses the cause. Investigation stopped there (`experiment_w8a8.py`).
+- **W8A8 was the fastest on the ANE** in every Python timing (about 1.55 ms against 1.9 ms), despite 387 extra quantize and dequantize ops, and the slowest on the GPU (8.5 ms against 7.3 ms). This needs confirming in Swift.
+- **P6 with one palette per 16 output channels** halves P6's error (2.41% flips) but grows to 15.9 MB, nearly W8's size, while W8 is more accurate. It needs the iOS 18 / macOS 15 format, and 11 tensors couldn't be grouped and stayed FP16. Kept as an experiment (`experiment_p6.py`).
+- **Setup:** scikit-learn 1.9.1 was added for k-means palettization. coremltools' warning that it supports only up to 1.5.1 concerns its scikit-learn model converter, which isn't used here.
+
 ## 5. Benchmarking
 
 **Measure in Swift, not Python.** Python adds its own overhead, and an app is what would ship. One benchmark mode in the app runs on both devices, so the numbers are comparable.

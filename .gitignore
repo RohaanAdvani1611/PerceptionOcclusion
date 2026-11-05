@@ -11,7 +11,7 @@ coreml/third_party/
 coreml/data/
 coreml/models/
 # Result images show the captured frames, which are private. Result tables are kept.
-coreml/results/*.png
+coreml/results/**/*.png
 !coreml/results/*.csv
 
 # Editor / clangd index

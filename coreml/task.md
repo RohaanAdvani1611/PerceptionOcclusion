@@ -39,12 +39,12 @@ See [PLAN.md](PLAN.md) for details. Tasks marked **(You)** need you at the keybo
 - [x] 14. Check FP16 for overflow and `inf` or `NaN`, including on the worst frame
 - [x] 15. Explain every op that isn't on the Neural Engine, and run a separate experiment for any fallback worth fixing
 
-## Stage 4: Compress and evaluate (Phase 5)
+## Stage 4: Compress and evaluate (Phase 5) (done)
 
-- [ ] 16. Build the 8-bit, 6-bit palettized and W8A8 versions
-- [ ] 17. Measure each version's accuracy on the held-out frames, including occlusion mask disagreement
-- [ ] 18. Generate side-by-side images, including each version's worst frame
-- [ ] 19. **(You)** Inspect the images and accuracy table
+- [x] 16. Build the 8-bit, 6-bit palettized and W8A8 versions
+- [x] 17. Measure each version's accuracy on the held-out frames, including occlusion mask disagreement
+- [x] 18. Generate side-by-side images, including each version's worst frame
+- [x] 19. **(You)** Inspect the images and accuracy table
 
 ## Stage 5: Swift app on Mac (Phase 6)
 
