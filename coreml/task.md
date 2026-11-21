@@ -55,12 +55,12 @@ See [PLAN.md](PLAN.md) for details. Tasks marked **(You)** need you at the keybo
 - [x] 24. Add the benchmark mode and `MLComputePlan` report
 - [x] 25. **(You)** Run the app, allow camera access, and confirm live depth and model switching work
 
-## Stage 6: Mac benchmarks (Phase 7)
+## Stage 6: Mac benchmarks (Phase 7) (done)
 
-- [ ] 26. Write the C++ ONNX timing runner, so the comparison uses the same frames
-- [ ] 27. **(You)** Run all 16 combinations of version and compute unit, plugged in with other apps closed
-- [ ] 28. **(You)** Run Xcode performance reports for the four versions
-- [ ] 29. **(You)** Measure power with `powermetrics`, and run the 10-minute soak test on the best version
+- [x] 26. Write the C++ ONNX timing runner, so the comparison uses the same frames
+- [x] 27. **(You)** Run all 16 combinations of version and compute unit, plugged in with other apps closed
+- [x] 28. **(You)** Run Xcode performance reports for the four versions
+- [x] 29. **(You)** Measure power with `powermetrics`, and run the 10-minute soak test on the best version
 
 ## Stage 7: iPhone 14 (Phase 8)
 

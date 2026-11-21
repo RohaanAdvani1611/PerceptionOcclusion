@@ -233,6 +233,61 @@ For **each variant × each compute unit** (`.all`, `.cpuAndNeuralEngine`, `.cpuA
 
 That's 16 combinations per device, and CSVs go to `inference/coreml/`. Roughly 15–30 minutes per device.
 
+**Mac results (2026-11-21, Release build, plugged in, Low Power Mode off, thermal state nominal throughout; `inference/coreml/benchmark_mac_m2_2026-11-21.csv`).** Prediction p50 in ms, 500 timed runs on the 100 held-out frames:
+
+| Version | All | CPU + Neural Engine | CPU + GPU | CPU only | First load, CPU+NE | Second load |
+|---|---|---|---|---|---|---|
+| FP16 | 1.83 | 1.81 | 8.05 | 11.08 | 52 ms* | ~20 ms |
+| W8 | 1.69 | 1.69 | 8.47 | 11.13 | 1,054 ms | ~23 ms |
+| P6 | 1.59 | 1.59 | 8.43 | 11.10 | 740 ms | ~22 ms |
+| W8A8 | 1.41 | 1.43 | 8.48 | 17.31 | 2,075 ms | ~34 ms |
+| ONNX Runtime, CPU, 4 threads | | | | 39.69 | 107 ms | |
+
+\*FP16's model was already compiled for the Neural Engine from earlier runs. Its first load under `.all` in this session took 775 ms.
+
+- **On the ANE, smaller is faster:** FP16 1.81 ms, W8 1.69, P6 1.59, W8A8 1.43. W8A8, the smallest in flight because its activations are 8-bit too, is 21% faster than FP16 despite 387 extra ops. This fits the ANE being limited by moving data rather than by arithmetic, but it's an inference from timing, not a measurement of memory traffic.
+- **On the GPU and CPU, compression doesn't help:** the compressed versions are the same speed or slightly slower, and W8A8 on the CPU is 56% slower (17.3 ms against 11.1), because the CPU runs every quantize and dequantize op.
+- **`.all` matches `.cpuAndNeuralEngine`,** so the 0.4 ms gap in the single Xcode report was noise.
+- **Against ONNX:** Core ML FP16 on the ANE is 22× faster than the C++ pipeline's model (1.81 ms against 39.69 ms), and W8A8 is 28× faster. Even on the CPU alone, Core ML FP16 is 3.6× faster than ONNX Runtime FP32 with 4 threads.
+- **The first load for the ANE is costly:** 0.7–2.5 s, as Core ML compiles the model for the Neural Engine and caches it. Later loads take 20–34 ms. W8A8's 589 ops take longest to compile.
+- **Xcode performance reports, CPU and Neural Engine, 2026-11-21:** every version runs all its ops on the ANE (202, or 589 for W8A8).
+
+  | Version | Prediction | Load | Compilation |
+  |---|---|---|---|
+  | FP16 (Stage 3) | 1.80 ms | 23.03 ms | 95.85 ms |
+  | W8 | 1.71 ms | 40.35 ms | 93.09 ms |
+  | P6 | 1.69 ms | 38.37 ms | 86.44 ms |
+  | W8A8 | 1.66 ms | 50.83 ms | 149.63 ms |
+
+  The order matches the app's benchmark, but the spread is smaller: W8A8 is 8% faster than FP16 here, against 21% in the app. Xcode's report times fewer runs on its own inputs, and the P6 and W8A8 reports were still finishing when captured, so the app's 500 runs on real frames are the numbers to use. Xcode's per-op estimates for W8A8 are about half FP16's (2 µs against 4 µs for the same early ops), which fits 8-bit activations halving the data each op moves. W8A8 also takes longest to compile, at 150 ms, with its 589 ops.
+- **Live latency is about 3× the benchmark on the ANE.** In the 11-minute soak, W8 on the ANE took about 5.7 ms per frame, against 1.69 ms back to back. A command-line test (W8, Release, 200 runs each) shows why: every processor gets slower when it sits idle between frames, and the ANE most of all.
+
+  | W8 median | Back to back | 5 ms pause | 33 ms pause (30 fps) |
+  |---|---|---|---|
+  | ANE | 1.59 ms | 4.93 ms | 5.14 ms (3.2×) |
+  | GPU | 6.92 ms | 13.10 ms | 14.12 ms (2.0×) |
+  | CPU | 10.97 ms | 11.04 ms | 16.59 ms (1.5×) |
+
+  This fits each processor dropping to a low-power state between frames and paying to wake up. The ANE pays even after a 5 ms gap, while the CPU slows gradually as the gap grows. At camera speed, the ANE is still the fastest. The benchmark's back-to-back numbers are best-case figures, and a live app should be judged at its real frame rate.
+- **Soak test (W8, ANE, 679 s, 2026-11-21; `inference/coreml/soak_mac_m2_w8_ane_2026-11-21.csv`):** the thermal state stayed nominal throughout. Per-minute median model time held at 5.6–5.7 ms for 10 minutes, then 6.2–6.4 ms in the last 2 minutes, which could be heat or the Mac being used again at the end. The camera delivered a steady 24 fps, probably lowered for exposure, since each frame took only about 8 ms in total. Resize took about 2.5 ms at 640×480.
+- **Power (`powermetrics`, 20 one-second samples, first 2 dropped as start-up; `inference/coreml/power_*.txt`, 2026-11-21).** DepthCam readings are the whole live app (camera, resize, model, display) at about 24 fps. ONNX is `onnx_bench` running flat out at about 25 inferences a second, so the two rates are similar.
+
+  | Reading | CPU | GPU | ANE | Total | Above idle |
+  |---|---|---|---|---|---|
+  | Idle | 251 mW | 0 | 0 | 251 mW | — |
+  | DepthCam FP16, CPU + Neural Engine | 348 | 18 | 326 | **693 mW** | 442 mW |
+  | DepthCam W8A8, CPU + Neural Engine | 403 | 28 | 299 | 731 mW | 480 mW |
+  | DepthCam FP16, CPU + GPU | 646 | 636 | 260 | 1,542 mW | 1,291 mW |
+  | DepthCam FP16, CPU only | 1,552 | 36 | 349 | 1,937 mW | 1,686 mW |
+  | ONNX Runtime, 4 threads | 18,293 | 20 | 0 | **18,313 mW** | 18,062 mW |
+
+  - The whole live app on the ANE uses **26× less power than ONNX's model alone** (0.69 W against 18.3 W) at a similar rate. That's about 29 mJ per frame for everything, against about 730 mJ per ONNX inference.
+  - On the same app, the ANE setting uses 2.2× less power than the GPU and 2.8× less than CPU only.
+  - W8A8 shows no power saving over FP16 on the ANE (731 against 693 mW, within the noise of 20 samples), despite being 21% faster back to back.
+  - **Unexplained:** the ANE draws 260–350 mW in every DepthCam reading, even with the model on the GPU or CPU alone, and 0 mW for ONNX with the camera off. Something tied to the camera seems to use the ANE, possibly macOS's camera video effects, but that's unverified. It also means the model's own ANE power can't be separated from that baseline.
+  - The first four DepthCam readings were invalid: macOS App Nap throttled DepthCam once the terminal was in front, so power fell to idle after about a second. The app now holds a `ProcessInfo.beginActivity(.userInitiated)` token, and the readings above are the redone ones.
+- **Bug fixed:** the device name `Mac14,15` contains a comma, which split it across two CSV columns. The app now quotes it, and the copy in `inference/coreml/` is corrected.
+
 **Comparison with ONNX.** A small C++ runner in `coreml/` times `session.Run` on the same frames with the corrected preprocessing, so model time is compared with model time. Live FPS is reported separately, since the app and the OpenCV pipeline differ in display and threading.
 
 **Xcode performance report steps** are given as exact clicks at Phase 7. In short: double-click the `.mlpackage`, open the **Performance** tab, click **+**, pick the device and compute unit, and run it. A report for the iPhone needs it connected by cable.

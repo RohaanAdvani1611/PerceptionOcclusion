@@ -59,9 +59,16 @@ struct ContentView: View {
                 Text(message).foregroundStyle(.red)
             }
 
-            Button("Run benchmark (all 16 combinations, about 5 minutes)") { app.runBenchmark() }
-                .disabled(app.isLoading || app.isBenchmarking)
+            HStack {
+                Button("Run benchmark (all 16 combinations, about 5 minutes)") { app.runBenchmark() }
+                    .disabled(app.isLoading || app.isBenchmarking || app.isSoakRecording)
+                Button(app.isSoakRecording ? "Stop and save soak log" : "Start soak log") { app.toggleSoakRecording() }
+                    .disabled(app.isLoading || app.isBenchmarking)
+            }
             if let status = app.benchmarkStatus {
+                Text(status).font(.caption).textSelection(.enabled)
+            }
+            if let status = app.soakStatus {
                 Text(status).font(.caption).textSelection(.enabled)
             }
         }

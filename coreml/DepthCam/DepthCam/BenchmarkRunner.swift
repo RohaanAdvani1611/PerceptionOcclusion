@@ -63,7 +63,7 @@ nonisolated struct BenchmarkRunner {
         let mean = times.reduce(0, +) / Double(times.count)
 
         let fields: [String] = [
-            Self.deviceName, Self.osVersion, variant.rawValue, compute.rawValue,
+            "\"\(Self.deviceName)\"", Self.osVersion, variant.rawValue, compute.rawValue,  // "Mac14,15" has a comma
             String(format: "%.2f", runner.compiledMegabytes),
             String(format: "%.1f", firstLoad), String(format: "%.1f", runner.loadMilliseconds),
             String(format: "%.3f", percentile(times, 0.5)), String(format: "%.3f", percentile(times, 0.9)),
