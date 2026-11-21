@@ -1,20 +1,20 @@
 #pragma once
+#include "perception/DepthModel.hpp"
 #include <opencv2/opencv.hpp>
 #include <onnxruntime_cxx_api.h>
 #include <memory>
 #include <string>
 #include <vector>
 
-class DepthEstimator {
+// MiDaS through ONNX Runtime on the CPU (4 threads)
+class DepthEstimator : public DepthModel {
 public:
     explicit DepthEstimator(const std::string& modelPath);
 
-    bool load();
-    bool isLoaded() const { return loaded_; }
-
-    // Returns float32 single-channel depth map, same spatial size as input bgr.
-    // Values normalized to [0, 1] where 1 = closest to camera.
-    cv::Mat infer(const cv::Mat& bgr);
+    bool load() override;
+    bool isLoaded() const override { return loaded_; }
+    cv::Mat infer(const cv::Mat& bgr) override;
+    std::string name() const override { return "ONNX CPU"; }
 
     int inputWidth()  const { return inputW_; }
     int inputHeight() const { return inputH_; }

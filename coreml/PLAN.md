@@ -1,17 +1,17 @@
 # MiDaS on Core ML: implementation plan
 
-**Status: approved on 2026-11-01. Implementation starts on your go-ahead.**
+**Status: approved on 2026-11-01; all stages done on 2026-11-21.** The write-up is in [RESULTS.md](RESULTS.md), and the task list is in [task.md](task.md). The results recorded under each section below are the detailed record.
 
 **Goal:** convert MiDaS v2.1 small to Core ML, compare four compressed variants on size, latency, accuracy and compute-unit placement, and run them on live camera frames in a small Swift app, on the M2 Mac first and then the iPhone 14.
 
-All new work stays in `coreml/`. The only existing file this plan changes is `.gitignore`.
+All new work stays in `coreml/`. Outside it, this plan's work changed only `.gitignore`, `README.md` and `project_structure.txt` changed, plus benchmark CSVs and power readings in `inference/coreml/`.
 
 ## Facts this plan is built on
 
 | Item | Value | How it affects the plan |
 |---|---|---|
 | Mac | MacBook Air M2 (`Mac14,15`), 8 GB, macOS 15.6.1 | It has no fan, so long runs will likely slow down from heat. Memory is tight, so close other apps while benchmarking. |
-| iPhone | iPhone 14 (A15), iOS 27.0.1 | Meets the iOS 17.4 minimum for per-op placement data. It's newer than Xcode 26.3's iOS 26.2 SDK, but a test app installed and ran on it, so no upgrade is needed. |
+| iPhone | iPhone 14 (A15), iOS 27.0.1 (27.2.1 by the Stage 7 measurements) | Meets the iOS 17.4 minimum for per-op placement data. It's newer than Xcode 26.3's iOS 26.2 SDK, but a test app installed and ran on it, so no upgrade is needed. |
 | Xcode | 26.3 with Swift 6.2.4; first-launch setup is done | No install needed. |
 | Default Python | 3.15.1 | Too new for coremltools, so we use a separate 3.12 environment. |
 | coremltools | 9.0, the latest; wheels up to Python 3.13; notes list PyTorch 2.7 | We pin PyTorch to 2.7, not the latest 2.15. |
@@ -345,7 +345,7 @@ That's 16 combinations per device, and CSVs go to `inference/coreml/`. Roughly 1
 
 **Power and heat:**
 - **Mac:** `sudo powermetrics` reports CPU, GPU and ANE power. It asks for your password, so you run it yourself.
-- **iPhone:** Instruments' power tools, with the phone connected. Exact availability on your Xcode is confirmed at Phase 8.
+- **iPhone:** Instruments' power tools, with the phone connected. As found in Phase 8, the Power Profiler instrument (added to a Blank template) works, but gives only relative "power impact" for the CPU, GPU and display, with no watts and no ANE track.
 - **Soak test:** run the live app for 10 minutes while logging latency and thermal state each second. The results are plotted over time. Your fanless Air makes this a meaningful test, and it runs once on each device for the best variant.
 
 ## 6. Swift app (minimal)
@@ -441,3 +441,23 @@ Only after the main results are done, and only if you want them:
 - **Comparison with the ONNX pipeline**, covering model time and live FPS separately.
 - **Mac vs iPhone comparison**, plus heat and power findings.
 - **Five interview talking points** using only measured numbers.
+
+## 11. Extra: Core ML back in the C++ engine (2026-11-21)
+
+- **Code:**
+  - `src/perception/CoreMLDepthEstimator.mm` loads `coreml/models/midas_small_w8.mlpackage` with CPU + Neural Engine.
+  - It resizes each frame to 256×256 with bilinear interpolation into a reused IOSurface-backed BGRA buffer, and converts the Float16 output to float.
+  - It shares `normalizeDepth` (in `DepthModel.cpp`) with the ONNX estimator.
+  - It's the default. `--depth onnx` selects ONNX, which is also the fallback if the model is missing. Only this `.mm` file is compiled with ARC.
+- **Offline check (100 saved frames enlarged to 640×480):**
+  - `infer()` p50 is 3.72 ms against 42.66 ms for ONNX. The first load takes 1.5 s.
+  - Against ONNX, correlation is 0.971 and mask flips are 6.8%, matching the known ONNX resize gap.
+- **Live engine (1,200 frames each, back to back; `inference/coreml_w8.csv`, `inference/onnx_rerun.csv`):**
+
+  | | ONNX | Core ML W8 |
+  |---|---|---|
+  | infer, mean | 44.6 ms | 5.5 ms |
+  | latency, mean (p99) | 64.6 ms (83.3) | 27.0 ms (31.0) |
+  | Loop, from the sum of stage times | 86.9 ms | 43.3 ms |
+
+  The camera wait plus display are now 70% of the loop. The ONNX rerun matches the October `run3.csv` (infer 44.8 ms, latency 65.2 ms).

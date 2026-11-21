@@ -28,6 +28,9 @@ endif()
 # Metal frameworks (macOS only)
 find_library(METAL_LIB      Metal      REQUIRED)
 find_library(FOUNDATION_LIB Foundation REQUIRED)
+# Core ML runs the depth model on the Neural Engine; CoreVideo provides its pixel buffers
+find_library(COREML_LIB     CoreML     REQUIRED)
+find_library(COREVIDEO_LIB  CoreVideo  REQUIRED)
 
 include_directories(${OpenCV_INCLUDE_DIRS} ${ORT_INCLUDE_DIR} src)
 
@@ -35,12 +38,17 @@ add_executable(engine
     src/main.cpp
     src/core/Engine.cpp
     src/camera/Camera.cpp
+    src/perception/DepthModel.cpp
     src/perception/DepthEstimator.cpp
+    src/perception/CoreMLDepthEstimator.mm
     src/perception/DepthPostProcessor.cpp
     src/rendering/MetalContext.mm
     src/rendering/Renderer.mm
     src/compositing/OcclusionPass.cpp
 )
+
+# Only this file uses ARC; the Metal files manage memory by hand
+set_source_files_properties(src/perception/CoreMLDepthEstimator.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
 
 # Exposes project root so Engine.cpp can locate assets/
 target_compile_definitions(engine PRIVATE PROJECT_ROOT="${CMAKE_SOURCE_DIR}")
@@ -50,4 +58,6 @@ target_link_libraries(engine
     ${ORT_LIB}
     ${METAL_LIB}
     ${FOUNDATION_LIB}
+    ${COREML_LIB}
+    ${COREVIDEO_LIB}
 )

@@ -1,4 +1,6 @@
 #include "core/Engine.hpp"
+#include "perception/CoreMLDepthEstimator.hpp"
+#include "perception/DepthEstimator.hpp"
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
 #include <chrono>
@@ -23,7 +25,7 @@ Engine::Engine(EngineOptions opts)
     : opts_(std::move(opts)),
       profiler_({"read", "infer", "post", "render", "gpu", "occlusion", "display", "latency"},
                 kWarmupFrames),
-      camera_(0), depthEstimator_(PROJECT_ROOT "/assets/models/midas.onnx"), renderer_(ctx_)
+      camera_(0), renderer_(ctx_)
 {
 }
 
@@ -37,8 +39,26 @@ bool Engine::initSystems()
         return false;
     camera_.setResolution(640, 480);
 
-    hasDepth_ = depthEstimator_.load();
-    if (!hasDepth_)
+    // Core ML uses the W8 model built by coreml/compress.py. Without it, fall back to ONNX.
+    if (opts_.depthBackend == "coreml")
+    {
+        depthModel_ = std::make_unique<CoreMLDepthEstimator>(PROJECT_ROOT "/coreml/models/midas_small_w8.mlpackage");
+        if (!depthModel_->load())
+        {
+            std::cerr << "Engine: Core ML model unavailable, falling back to ONNX (see coreml/ to build it)\n";
+            depthModel_.reset();
+        }
+    }
+    if (!depthModel_)
+    {
+        depthModel_ = std::make_unique<DepthEstimator>(PROJECT_ROOT "/assets/models/midas.onnx");
+        if (!depthModel_->load())
+            depthModel_.reset();
+    }
+    hasDepth_ = depthModel_ != nullptr;
+    if (hasDepth_)
+        std::cout << "Depth model: " << depthModel_->name() << "\n";
+    else
         std::cerr << "Engine: depth disabled — place midas.onnx in assets/models/\n";
 
     hasMetal_ = ctx_.init(PROJECT_ROOT "/assets/shaders") &&
@@ -67,7 +87,7 @@ bool Engine::processFrame(Frame &frame)
     if (hasDepth_)
     {
         auto ti = Clock::now();
-        frame.depth = depthEstimator_.infer(frame.image);
+        frame.depth = depthModel_->infer(frame.image);
         auto tp = Clock::now();
         frame.depthSmoothed = depthPostProcessor_.process(frame.depth);
         profiler_.record("infer", Ms(tp - ti).count());
@@ -117,7 +137,8 @@ void Engine::updateDisplay(Frame &frame)
     if (hasMetal_ && !frame.composited.empty())
     {
         cv::putText(frame.composited,
-                    "Threshold: " + std::to_string(occlusionThreshold_).substr(0, 4),
+                    "Threshold: " + std::to_string(occlusionThreshold_).substr(0, 4) +
+                        (hasDepth_ ? "  Depth: " + depthModel_->name() : ""),
                     cv::Point(10, 30), cv::FONT_HERSHEY_SIMPLEX,
                     0.7, cv::Scalar(0, 255, 255, 255), 2);
         cv::imshow("AR View", frame.composited);

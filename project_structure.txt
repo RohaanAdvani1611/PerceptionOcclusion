@@ -6,6 +6,7 @@ perceptual_occlusion/
 ├── README.md
 │
 ├── inference/        (benchmark CSVs written by bench.sh, not tracked by git)
+│   └── coreml/       (Core ML benchmark, soak and ONNX timing CSVs, and powermetrics readings)
 │
 ├── assets/
 │   ├── models/
@@ -21,16 +22,49 @@ perceptual_occlusion/
 │   ├── camera/
 │   │   ├── Camera.hpp / Camera.cpp
 │   ├── perception/
-│   │   ├── DepthEstimator.hpp / .cpp
+│   │   ├── DepthModel.hpp / .cpp            (shared interface and depth normalization)
+│   │   ├── CoreMLDepthEstimator.hpp / .mm   (default: Core ML W8 model on the Neural Engine)
+│   │   ├── DepthEstimator.hpp / .cpp        (ONNX Runtime on the CPU, --depth onnx)
 │   │   ├── DepthPostProcessor.hpp / .cpp
 │   ├── rendering/
 │   │   ├── Renderer.hpp / .cpp
 │   │   ├── MetalContext.hpp / .mm
 │   └── compositing/
 │       ├── OcclusionPass.hpp / .cpp
+│
+├── coreml/           (Core ML and Neural Engine extension; see README Section 9)
+│   ├── RESULTS.md / PLAN.md / task.md / VERSIONS.md
+│   ├── requirements.txt
+│   ├── midas_loader.py          (builds MiDaS, wraps normalization, loads frames)
+│   ├── capture_frames.py        (captures calibration and held-out frames)
+│   ├── convert.py               (PyTorch → FP32 and FP16 .mlpackage)
+│   ├── check_conversion.py      (Core ML vs PyTorch vs ONNX)
+│   ├── analyze_placement.py     (per-op CPU / GPU / Neural Engine placement)
+│   ├── compress.py              (W8, P6 and W8A8 versions)
+│   ├── evaluate.py              (accuracy on the held-out frames)
+│   ├── export_bench_frames.py   (frames for the app's benchmark mode)
+│   ├── experiment_*.py          (side experiments recorded in PLAN.md)
+│   ├── onnx_baseline/           (C++ ONNX Runtime timer on the same frames)
+│   ├── results/                 (accuracy and placement CSVs; images not tracked)
+│   ├── DepthCam/                (SwiftUI app for macOS and iOS)
+│   │   └── DepthCam/
+│   │       ├── CameraManager.swift      (640×480 camera frames, drops late frames)
+│   │       ├── FrameResizer.swift       (vImage resize to 256×256)
+│   │       ├── ModelRunner.swift        (loads a model version with chosen compute units)
+│   │       ├── DepthPipeline.swift      (resize → predict → display, live timings)
+│   │       ├── DepthRenderer.swift      (Metal colour-mapped depth view)
+│   │       ├── ComputePlanReport.swift  (MLComputePlan placement summary)
+│   │       ├── BenchmarkRunner.swift    (times all 16 version × compute-unit combinations)
+│   │       ├── AppModel.swift / ContentView.swift / DepthCamApp.swift
+│   │       ├── Models/          (the four .mlpackage files; not tracked)
+│   │       └── BenchFrames/     (benchmark frames; not tracked)
+│   ├── models/ data/ third_party/   (generated models, captured frames, MiDaS source; not tracked)
 
 Pipeline Flow:
 Camera → DepthEstimator → DepthPostProcessor → Renderer → OcclusionPass → Output
+
+Core ML app flow (coreml/DepthCam):
+Camera (640×480) → vImage resize (256×256) → Core ML on the Neural Engine → Metal depth view
 
 Build Phases:
 1. Camera feed
@@ -55,10 +89,11 @@ Module-by-Module Breakdown
 - Handles webcam input using OpenCV
 - Captures frames and returns cv::Mat
 
-4. perception/DepthEstimator
-- Loads ONNX model (MiDaS or similar)
-- Performs inference on input frames
-- Outputs raw depth map
+4. perception/DepthModel, CoreMLDepthEstimator, DepthEstimator
+- DepthModel is the interface the engine uses, plus the shared percentile normalization
+- CoreMLDepthEstimator (default) runs the W8 Core ML model from coreml/models/ on the Neural Engine
+- DepthEstimator runs the ONNX model on the CPU (--depth onnx, and the fallback if the Core ML model is missing)
+- Both output a depth map normalized to [0, 1]
 
 5. perception/DepthPostProcessor
 - Applies temporal smoothing across frames
@@ -82,3 +117,8 @@ Key Responsibilities:
 - Maintain low latency
 - Ensure temporal stability
 - Perform GPU-based compositing
+
+9. coreml/ (Core ML extension)
+- Converts the same MiDaS model to Core ML and compresses it three ways
+- Measures size, accuracy, latency, power and Neural Engine placement on an M2 Mac and an iPhone 14
+- DepthCam runs it live on camera frames; results are in coreml/RESULTS.md

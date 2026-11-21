@@ -69,8 +69,13 @@ See [PLAN.md](PLAN.md) for details. Tasks marked **(You)** need you at the keybo
 - [x] 32. **(You)** Repeat the 16 benchmarks, the performance reports, the power check and the soak test
 - [x] 33. Compare the Mac and iPhone results
 
-## Stage 8: Write up (Phase 9)
+## Stage 8: Write up (Phase 9) (done)
 
-- [ ] 34. Write `RESULTS.md`, with the tables, explanations and ONNX comparison
-- [ ] 35. Write the five talking points using only measured numbers
-- [ ] 36. **(Optional)** Add the temporal filter or occlusion demo to the app
+- [x] 34. Write `RESULTS.md`, with the tables, explanations and ONNX comparison
+- [x] 35. Write the five talking points using only measured numbers
+- [ ] 36. **(Optional)** Add the temporal filter or occlusion demo to the app (skipped for now)
+
+## Extra: back into the engine (done)
+
+- [x] 37. Add a Core ML depth estimator to the C++ occlusion engine and make it the default (`--depth onnx` keeps the old path)
+- [x] 38. **(You)** Benchmark the engine with Core ML and with ONNX, back to back

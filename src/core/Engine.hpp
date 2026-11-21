@@ -2,16 +2,18 @@
 #include "core/Frame.hpp"
 #include "core/Profiler.hpp"
 #include "camera/Camera.hpp"
-#include "perception/DepthEstimator.hpp"
+#include "perception/DepthModel.hpp"
 #include "perception/DepthPostProcessor.hpp"
 #include "rendering/MetalContext.hpp"
 #include "rendering/Renderer.hpp"
 #include "compositing/OcclusionPass.hpp"
+#include <memory>
 #include <string>
 
 struct EngineOptions {
     int         benchFrames = 0;  // >0: exit after this many measured frames (post warm-up)
     std::string csvPath;          // non-empty: write per-frame timings here on exit
+    std::string depthBackend = "coreml";  // "coreml" (Neural Engine) or "onnx" (CPU)
 };
 
 class Engine {
@@ -28,7 +30,7 @@ private:
     EngineOptions      opts_;
     Profiler           profiler_;
     Camera             camera_;
-    DepthEstimator     depthEstimator_;
+    std::unique_ptr<DepthModel> depthModel_;
     DepthPostProcessor depthPostProcessor_;
     MetalContext       ctx_;
     Renderer           renderer_;
