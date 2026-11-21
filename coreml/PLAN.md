@@ -288,6 +288,57 @@ That's 16 combinations per device, and CSVs go to `inference/coreml/`. Roughly 1
   - The first four DepthCam readings were invalid: macOS App Nap throttled DepthCam once the terminal was in front, so power fell to idle after about a second. The app now holds a `ProcessInfo.beginActivity(.userInitiated)` token, and the readings above are the redone ones.
 - **Bug fixed:** the device name `Mac14,15` contains a comma, which split it across two CSV columns. The app now quotes it, and the copy in `inference/coreml/` is corrected.
 
+**iPhone 14 results (2026-11-21, iOS 27.2.1, Release build, unplugged, Low Power Mode off, thermal state nominal throughout; `inference/coreml/benchmark_iphone14_2026-11-21.csv`).** p50 in ms, with the ratio to the Mac in brackets:
+
+| Version | CPU + ANE | CPU + GPU | CPU only | First / second load, ANE |
+|---|---|---|---|---|
+| FP16 | 2.79 (1.54×) | 19.14 (2.38×) | 12.55 (1.13×) | 78* / 25 ms |
+| W8 | 2.49 (1.47×) | 19.03 (2.25×) | 12.70 (1.14×) | 1,003 / 32 ms |
+| P6 | 2.20 (1.38×) | 19.02 (2.26×) | 12.68 (1.14×) | 942 / 31 ms |
+| W8A8 | 2.21 (1.54×) | 18.67 (2.20×) | 20.91 (1.21×) | 109* / 42 ms |
+
+\* The `all` run just before had already compiled the model for the ANE (821 and 1,558 ms), so this first load hit the cache.
+
+- **Placement is identical to the Mac:** 202 of 202 ops on the ANE for every version with CPU + ANE (589 for W8A8, counting the quantize ops).
+- **ANE is 1.4–1.5× slower than the M2's,** even though both are 16-core Neural Engines rated about 15.8 TOPS.
+- **Weight compression helps more on the iPhone:** FP16 → P6 saves 0.59 ms (21%) there against 0.22 ms (12%) on the Mac. Both points fit the iPhone having less memory bandwidth (LPDDR4X against the M2's LPDDR5), with weight loading a bigger share of the time. That's an inference from the numbers, not measured directly.
+- **On the iPhone, the GPU is the slowest choice:** 19 ms, slower than the CPU's 12.6 ms. The iPhone 14's 5-core GPU is 2.2–2.4× slower than this M2's 10-core GPU, while the CPUs are within 15% of each other.
+- **W8A8 is 1.7× slower on the CPU than FP16,** as on the Mac, because of the extra quantize and dequantize ops.
+- Second loads for the GPU and CPU take about 1 ms on the iPhone against about 20 ms on the Mac. This isn't explained and isn't investigated.
+
+**iPhone soak (W8A8 on CPU + ANE, 601 s, unplugged; `inference/coreml/soak_iphone14_w8a8_ane_2026-11-21.csv`).** The Mac soak used W8, so the versions differ; both run fully on the ANE.
+- Thermal state stayed **nominal** for all 10 minutes. Model p50 held at 5.05–5.12 ms every minute (p99 about 5.4 ms), at 24 FPS, with no slowdown. The Mac's W8 drifted from about 5.7 to 6.3 ms over 11 minutes.
+- Live latency is 2.3× the benchmark's 2.21 ms, the same idle-between-frames effect seen on the Mac.
+- The resize takes about 3.3 ms on the iPhone against about 2.5 ms on the Mac.
+
+**iPhone Xcode performance reports (2026-11-21, compute units All, iOS 27.2.1).** Xcode's report disagrees with what the app measures:
+
+| Version | Xcode median prediction | Xcode load / compile | Xcode placement | App benchmark (`all`) |
+|---|---|---|---|---|
+| FP16 | 4.76 ms | 536 / 107 ms | 185 ANE, 4 GPU | 2.78 ms, 100% ANE |
+| W8 | 4.30 ms | 629 / 111 ms | 185 ANE, 4 GPU | 2.50 ms, 100% ANE |
+| P6 | 4.04 ms | 665 / 107 ms | 185 ANE, 4 GPU | 2.21 ms, 100% ANE |
+| W8A8 | 143.44 ms | 1,403 / 173 ms | 50 ANE, 530 CPU | 2.20 ms, 100% ANE |
+
+- For FP16, W8 and P6, Xcode puts the four input ops (`cast`, `reverse`, `sub`, `mul`) on the GPU and the rest on the ANE. On the Mac, Xcode put all of them on the ANE. A GPU-to-ANE handoff at the start fits Xcode's times being about 2 ms higher than the app's, but that isn't verified.
+- For W8A8, Xcode puts 530 of 580 ops on the CPU, starting with the quantize and dequantize ops, and a prediction takes 143 ms. The app's `MLComputePlan` and timings on the same phone show 100% ANE at 2.2 ms. On the Mac, Xcode's report showed W8A8 on the ANE at 1.66 ms.
+- A likely cause is that Xcode's report compiles the `.mlpackage` on the phone, with iOS 27.2.1's compiler. The app bundles a model compiled at build time by Xcode 26.3's compiler. That's unverified, and not investigated further. **The lesson:** check placement in the shipped app on the target device, not only in a tool.
+
+**iPhone power (Instruments Power Profiler, 2026-11-21, 2 min 16 s, phone plugged in; screenshot only, not saved).** About 30 s each of FP16 on CPU + ANE, FP16 on CPU + GPU, FP16 on CPU only, and W8A8 on CPU + ANE. Power Profiler reports a unitless "power impact" per process for the CPU, GPU, display and networking. It has no ANE track and no watts, so this is a relative comparison only.
+- **CPU + ANE (FP16 and W8A8):** CPU and GPU impact both near zero, the lowest of the four.
+- **CPU + GPU:** a clear, steady GPU impact for the whole section, with little CPU.
+- **CPU only:** the highest sustained CPU impact of the run.
+- Short CPU spikes at each switch are model loads.
+- Thermal state stayed nominal, and brightness was fixed at 40%. Whole-system battery drain reads 0.0%/hr because the charger was connected, so it can't be used.
+- **Conclusion:** the iPhone ranks the settings the same way as the Mac's `powermetrics` readings (ANE lowest, then GPU, then CPU). The ANE's own power isn't visible on the iPhone.
+
+**Mac vs iPhone summary (task 33):**
+- **Same placement:** 100% ANE in the app on both devices.
+- **ANE latency:** 1.4–1.5× slower on the iPhone. Compression saves more there (FP16 → P6: 21% against 12%).
+- **GPU and CPU:** the iPhone GPU is 2.2–2.4× slower; the CPUs are within 15%. On the iPhone the GPU is slower than the CPU.
+- **Heat:** both stayed nominal through 10-minute soaks. The iPhone held a flat 5.1 ms (W8A8); the Mac drifted from 5.7 to 6.3 ms (W8).
+- **Xcode's report on the iPhone disagrees with the app** (input ops on the GPU; W8A8 mostly on the CPU at 143 ms). On the Mac, Xcode and the app agree.
+
 **Comparison with ONNX.** A small C++ runner in `coreml/` times `session.Run` on the same frames with the corrected preprocessing, so model time is compared with model time. Live FPS is reported separately, since the app and the OpenCV pipeline differ in display and threading.
 
 **Xcode performance report steps** are given as exact clicks at Phase 7. In short: double-click the `.mlpackage`, open the **Performance** tab, click **+**, pick the device and compute unit, and run it. A report for the iPhone needs it connected by cable.

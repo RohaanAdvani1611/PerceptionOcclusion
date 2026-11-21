@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Shows DepthCam's Documents folder (benchmark and soak CSVs) in the Files app.
+	     Xcode's generated Info.plist ignores this key when set as a build setting. -->
+	<key>UIFileSharingEnabled</key>
+	<true/>
+</dict>
+</plist>

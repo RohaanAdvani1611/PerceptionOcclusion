@@ -62,12 +62,12 @@ See [PLAN.md](PLAN.md) for details. Tasks marked **(You)** need you at the keybo
 - [x] 28. **(You)** Run Xcode performance reports for the four versions
 - [x] 29. **(You)** Measure power with `powermetrics`, and run the 10-minute soak test on the best version
 
-## Stage 7: iPhone 14 (Phase 8)
+## Stage 7: iPhone 14 (Phase 8) (done)
 
-- [ ] 30. **(You)** Connect the iPhone, sign in with an Apple ID, turn on Developer Mode and install the app
-- [ ] 31. **(You)** Confirm live depth works on the phone
-- [ ] 32. **(You)** Repeat the 16 benchmarks, the performance reports, the power check and the soak test
-- [ ] 33. Compare the Mac and iPhone results
+- [x] 30. **(You)** Connect the iPhone, sign in with an Apple ID, turn on Developer Mode and install the app
+- [x] 31. **(You)** Confirm live depth works on the phone
+- [x] 32. **(You)** Repeat the 16 benchmarks, the performance reports, the power check and the soak test
+- [x] 33. Compare the Mac and iPhone results
 
 ## Stage 8: Write up (Phase 9)
 

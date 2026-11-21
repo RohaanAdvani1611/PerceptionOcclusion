@@ -1,5 +1,8 @@
 import Foundation
 import Observation
+#if os(iOS)
+import UIKit
+#endif
 
 /// The app's state for the UI: which model is loaded, live timings, errors.
 @Observable
@@ -37,6 +40,10 @@ final class AppModel {
     func start() async {
         liveActivity = ProcessInfo.processInfo.beginActivity(options: .userInitiated,
                                                              reason: "Live depth from the camera")
+        #if os(iOS)
+        // Keeps the phone from auto-locking, which would stop the camera during the soak test
+        UIApplication.shared.isIdleTimerDisabled = true
+        #endif
         reload()
         do {
             try await camera.start()
