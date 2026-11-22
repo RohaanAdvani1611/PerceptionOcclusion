@@ -1,10 +1,50 @@
-# Real-Time Perceptual Occlusion Engine for AR Systems
+<h1 align="center">Real-Time Perceptual Occlusion Engine for AR</h1>
+
+<p align="center">
+  <b>Virtual objects that correctly hide behind real ones, from a single webcam.</b><br>
+  Monocular depth estimation (MiDaS + ONNX Runtime) · GPU rendering (Metal) · depth-aware compositing, in modern C++.
+</p>
+
+<p align="center">
+  <img alt="C++17" src="https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus&logoColor=white">
+  <img alt="Metal" src="https://img.shields.io/badge/Metal-GPU-555555?logo=apple&logoColor=white">
+  <img alt="ONNX Runtime" src="https://img.shields.io/badge/ONNX%20Runtime-MiDaS%20v2.1-005CED?logo=onnx&logoColor=white">
+  <img alt="OpenCV" src="https://img.shields.io/badge/OpenCV-5C3EE8?logo=opencv&logoColor=white">
+  <img alt="CMake" src="https://img.shields.io/badge/CMake%20%2B%20Ninja-064F8C?logo=cmake&logoColor=white">
+  <img alt="Platform" src="https://img.shields.io/badge/platform-macOS-lightgrey?logo=apple">
+</p>
 
 <p align="center">
   <a href="docs/demo.mp4"><img src="docs/demo.gif" alt="Perceptual Occlusion Engine demo: a virtual sphere slides behind a real laptop, cup and flowers" width="100%"></a>
   <br>
   <sub><a href="docs/demo.mp4">▶ Watch the full video with sound</a></sub>
 </p>
+
+<table align="center">
+  <tr>
+    <td align="center"><b>~65 ms</b><br><sub>processing latency (mean)</sub></td>
+    <td align="center"><b>~11.6 FPS</b><br><sub>end-to-end on Apple M2</sub></td>
+    <td align="center"><b>~1 ms</b><br><sub>render + composite</sub></td>
+    <td align="center"><b>1 camera</b><br><sub>no LiDAR or stereo needed</sub></td>
+  </tr>
+</table>
+
+<details>
+<summary><b>Contents</b></summary>
+
+1. [Overview](#1-overview)
+2. [System Requirements & Setup](#2-system-requirements--setup)
+3. [Motivation](#3-motivation)
+4. [System Architecture](#4-system-architecture)
+5. [Core Components](#5-core-components)
+6. [Performance & Benchmarking](#6-performance--benchmarking)
+7. [Challenges and Solutions](#7-challenges-and-solutions)
+8. [Results](#8-results)
+9. [Future Work](#9-future-work)
+10. [Key Takeaways](#10-key-takeaways)
+11. [Repository Layout](#11-repository-layout)
+
+</details>
 
 ## 1. Overview
 
@@ -86,8 +126,14 @@ This project addresses that limitation by introducing:
 
 The pipeline runs as a single synchronous loop, one stage after another per frame:
 
-```
-Camera → DepthEstimator → DepthPostProcessor → Renderer (Metal) → OcclusionPass → Display
+```mermaid
+flowchart LR
+    A[📷 Camera<br/>640×480 RGB] --> B[DepthEstimator<br/>MiDaS · ONNX Runtime]
+    B --> C[DepthPostProcessor<br/>bilateral + temporal EMA]
+    C --> E[OcclusionPass<br/>depth mask + composite]
+    D[Renderer<br/>Metal sphere] --> E
+    A --> E
+    E --> F[🖥️ AR view]
 ```
 
 ### Input Stage
@@ -226,6 +272,25 @@ Apple M2 (8 GB), macOS 15.6, ONNX Runtime 1.31 (CPU), OpenCV 5.0, 640×480 input
 
 ## 10. Key Takeaways
 
-- CV + graphics integration
-- Real-time system design and measurement
-- Perceptual rendering principles
+- **CV + graphics integration:** a neural depth map and a GPU-rendered scene must share one camera model to line up pixel for pixel
+- **Measure before optimizing:** per-stage profiling showed inference is ~68% of latency, so rendering work would have been wasted effort
+- **Perceptual rendering:** temporal stability matters as much as per-frame accuracy; flicker breaks the illusion faster than small depth errors
+
+## 11. Repository Layout
+
+```
+src/
+├── main.cpp                   entry point, CLI flags (--bench, --csv)
+├── core/          Engine      main loop that wires the pipeline together
+│                  Profiler    per-stage timing, warm-up exclusion, CSV export
+│                  Frame       per-frame data passed between stages
+├── camera/        Camera      OpenCV / AVFoundation capture
+├── perception/    DepthEstimator, DepthPostProcessor
+├── rendering/     MetalContext.mm, Renderer.mm   (Objective-C++ / Metal)
+└── compositing/   OcclusionPass
+assets/
+├── models/midas.onnx          MiDaS v2.1 small
+└── shaders/                   vertex.metal, fragment_occlusion.metal
+docs/                          demo.gif, demo.mp4
+run.sh · bench.sh · clean.sh   build + run · benchmark · clean rebuild + run
+```
